@@ -47,7 +47,7 @@ app.post('/api/study', upload.single('image'), async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`SnapStudy listening on http://localhost:${PORT}`);
   console.log(
     process.env.GEMINI_API_KEY
@@ -55,3 +55,9 @@ app.listen(PORT, () => {
       : 'No GEMINI_API_KEY — using local Ollama (Gemma 4 open weights)'
   );
 });
+
+// Local open-weights inference can take many minutes on CPU — don't let
+// Node's default 5-minute requestTimeout kill in-flight generations.
+server.requestTimeout = 0;
+server.headersTimeout = 120000;
+server.setTimeout(0);
