@@ -35,7 +35,9 @@ esac
 
 ANALYSIS="$(cat)"
 
-ollama run "$MODEL" <<EOF
+# --think=false keeps thinking-model chatter out of the markdown;
+# --nowordwrap keeps lines intact for files.
+ollama run --think=false --nowordwrap "$MODEL" <<EOF
 You are a senior engineer writing onboarding documentation. Below is a JSON
 analysis of this repository's Graphify knowledge graph. It is your ONLY source
 of truth: never mention a function, class, or file that does not appear in it.
