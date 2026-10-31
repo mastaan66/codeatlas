@@ -1,5 +1,7 @@
 # repo-tour
 
+[![CI](https://github.com/mastaan66/repo-tour/actions/workflows/ci.yml/badge.svg)](https://github.com/mastaan66/repo-tour/actions/workflows/ci.yml)
+
 **An agent skill that turns any codebase into an onboarding experience — powered by Graphify's knowledge graph and a local open-weight Gemma model.**
 
 Point your agent (Claude Code, opencode) at a repo and say *"give me a tour of this repo"*. The skill builds/reads the Graphify knowledge graph and generates three documents in `docs/tour/`:
@@ -69,6 +71,14 @@ Generated for [memolite](examples/memolite/) (451 nodes, 990 edges, 18 communiti
 ```
 
 …and the tour it becomes: [ONBOARDING.md](examples/memolite/ONBOARDING.md) · [ARCHITECTURE.md](examples/memolite/ARCHITECTURE.md) · [GOOD-FIRST-SPOTS.md](examples/memolite/GOOD-FIRST-SPOTS.md)
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+The suite exercises the analyzer end-to-end (as a subprocess, `python3 -I`) on a small synthetic graph, on the real memolite graph fixture (`tests/fixtures/memolite-graph.json`, 451 nodes / 18 communities), and on malformed input. CI runs it on every push and PR (see `.github/workflows/ci.yml`).
 
 ## Layout
 
