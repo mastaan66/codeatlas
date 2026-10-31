@@ -95,6 +95,10 @@ https://github.com/user-attachments/assets/11501f70-7ba3-409b-bc97-5a226841c2db
 
 ![The same graph in the dark night-notebook theme](docs/screenshots/graph-dark.png)
 
+**Symbol** — click any node for its file, module, connectivity and a jump to source.
+
+![Symbol tab showing MemoryStore's file, module, degree and callable status](docs/screenshots/symbol.png)
+
 **Ask** — Gemma 4 answers from the graph, with file:line citations.
 
 ![Ask tab answering a question about the CLI and storage layer](docs/screenshots/ask.png)
@@ -102,6 +106,10 @@ https://github.com/user-attachments/assets/11501f70-7ba3-409b-bc97-5a226841c2db
 **Tour** — one-click numbered onboarding tour generated from the graph.
 
 ![Generated onboarding tour for memolite](docs/screenshots/tour.png)
+
+**Study** — flashcards and a pop quiz written from the same graph.
+
+![Study tab showing graph-generated flashcards for memolite](docs/screenshots/study.png)
 
 ## Tests
 
