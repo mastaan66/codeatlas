@@ -77,8 +77,13 @@ All of it collapses to instant, motion-free states under `prefers-reduced-motion
 
 ## Demos
 
-- **Product walkthrough (55s):** [`docs/demo/codeatlas-demo.mp4`](docs/demo/codeatlas-demo.mp4) — map → spotlight → file viewer → graph-grounded answer → tour → theme flip.
-- **Test run (47s):** [`docs/demo/tests-demo.mp4`](docs/demo/tests-demo.mp4) — all three suites green, fully offline.
+**Product walkthrough (55s)** — map → spotlight → file viewer → graph-grounded answer → tour → theme flip.
+
+https://github.com/user-attachments/assets/aeb6b9ae-b3ad-4771-b974-554ca48613c3
+
+**Test run (47s)** — all three suites green, fully offline.
+
+https://github.com/user-attachments/assets/11501f70-7ba3-409b-bc97-5a226841c2db
 
 ## Screenshots
 
