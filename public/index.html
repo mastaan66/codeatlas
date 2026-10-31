@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SnapStudy</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📸</text></svg>" />
+  <script>
+    // Apply stored theme before first paint to avoid a flash of the wrong theme.
+    try {
+      var t = localStorage.getItem('snapstudy-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Noto+Sans+Telugu:wght@400;600&display=swap" />
   <link rel="stylesheet" href="style.css" />
@@ -21,6 +28,10 @@
         <button id="lang-te" class="lang-btn" data-lang="te">తెలుగు</button>
       </div>
       <span id="provider-badge" class="badge hidden"></span>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+        <span class="icon-sun" aria-hidden="true">☀️</span>
+        <span class="icon-moon" aria-hidden="true">🌙</span>
+      </button>
     </div>
   </header>
 

@@ -120,6 +120,18 @@
     show('upload');
   }
 
+  // ---------- theme toggle ----------
+  $('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    let current = root.getAttribute('data-theme');
+    if (current !== 'light' && current !== 'dark') {
+      current = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    const next = current === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('snapstudy-theme', next); } catch (e) {}
+  });
+
   // ---------- language toggle ----------
   document.querySelectorAll('.lang-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
