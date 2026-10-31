@@ -296,7 +296,7 @@ async function onAsk() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug: currentSlug, question: q }),
     });
-    $('#answer').textContent = answer + `\n\n— ${provider}`;
+    renderMarkdown($('#answer'), answer, provider);
   } catch (err) {
     $('#answer').textContent = 'Error: ' + err.message;
   } finally {
@@ -311,11 +311,22 @@ async function onTour() {
   $('#tour').textContent = 'Building a guided tour from the knowledge graph…';
   try {
     const { tour, provider } = await fetchJSON('/api/tour/' + encodeURIComponent(currentSlug));
-    $('#tour').textContent = tour + `\n\n— ${provider}`;
+    renderMarkdown($('#tour'), tour, provider);
   } catch (err) {
     $('#tour').textContent = 'Error: ' + err.message;
   } finally {
     btn.disabled = false;
+  }
+}
+
+// Model output is markdown — render it, sanitized (belt-and-braces).
+function renderMarkdown(el, md, provider) {
+  if (window.marked && window.DOMPurify) {
+    el.classList.add('md');
+    el.innerHTML = DOMPurify.sanitize(marked.parse(md || '')) +
+      (provider ? `<p class="muted">— ${esc(provider)}</p>` : '');
+  } else {
+    el.textContent = md + (provider ? `\n\n— ${provider}` : '');
   }
 }
 

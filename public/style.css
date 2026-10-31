@@ -144,6 +144,28 @@ main { flex: 1; display: flex; min-height: 0; }
 .tabPanel textarea { width: 100%; margin-bottom: 8px; }
 .muted { color: var(--muted); font-size: 13px; }
 .prose { margin-top: 12px; font-size: 14px; white-space: pre-wrap; }
+.prose.md { white-space: normal; line-height: 1.55; }
+.prose.md h1, .prose.md h2, .prose.md h3, .prose.md h4 {
+  margin: 14px 0 6px; font-size: 15px; color: var(--accent);
+}
+.prose.md h1 { font-size: 17px; }
+.prose.md p { margin: 7px 0; }
+.prose.md ul, .prose.md ol { margin: 7px 0; padding-left: 22px; }
+.prose.md li { margin: 3px 0; }
+.prose.md code {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+  padding: 1px 5px; font-size: 12.5px;
+}
+.prose.md pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; overflow-x: auto; margin: 8px 0;
+}
+.prose.md pre code { border: 0; padding: 0; }
+.prose.md strong { color: var(--text); }
+.prose.md blockquote {
+  border-left: 3px solid var(--border); margin: 8px 0; padding: 2px 12px; color: var(--muted);
+}
+.prose.md hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
 #nodeDetails .kv { margin-top: 10px; }
 #nodeDetails .kv div { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 #nodeDetails .kv b { color: var(--accent); }
