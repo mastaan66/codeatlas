@@ -59,6 +59,16 @@ npm start              # http://localhost:3001
 
 Requires: Node ≥ 20, `git`, and the Graphify CLI (`uv tool install graphifyy`). For offline mode: Ollama with `ollama pull gemma4`.
 
+## Tests
+
+[![CI](https://github.com/mastaan66/codeatlas/actions/workflows/ci.yml/badge.svg)](https://github.com/mastaan66/codeatlas/actions/workflows/ci.yml)
+
+```bash
+npm test
+```
+
+15 fast tests on `node:test` (zero extra dependencies): slug sanitizing and GitHub-URL validation in `lib/indexer.js`, seed-graph loading (link integrity, degrees, stats), Gemma prompt context builders, and an integration pass that boots the real server on a test port (`:3100`) and exercises the API — health, repos, graph, path-traversal slugs, and bad-input 400s. Tests never call Gemini or Ollama: the API key is blanked and the Ollama URL points at a dead port. CI runs on every push/PR via GitHub Actions.
+
 ## Scalability
 
 - **Stateless server** — graphs and tours are cached on disk keyed by repo slug; the data dir can move to shared/object storage, so instances scale horizontally behind a load balancer.

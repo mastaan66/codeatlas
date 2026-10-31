@@ -4,7 +4,8 @@
   "description": "Explore any codebase as an interactive knowledge graph with a Gemma 4 guide (Graphify + Gemini API/Ollama)",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "keywords": [],
   "author": "",
