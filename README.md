@@ -36,7 +36,7 @@ Joining a codebase is the slowest part of contributing to open source. READMEs g
 | Best Use of Graphify | Graphify's knowledge graph is the core data structure: the viz, the Q&A grounding, and the tour are all built from `graph.json` |
 | Best Use of Gemma 4 | All reasoning runs on Gemma 4 — `gemma-4-26b-a4b-it` via the Gemini API |
 | Best Open-Source AI Project | MIT-licensed; runs fully offline on **open-weight Gemma 4 via Ollama** when no API key is set |
-| Best Use of Cloudways | Deployed live on Cloudways (see Deployment) |
+| Best Use of Cloudways | Deployed live on Cloudways — see [DEPLOY.md](DEPLOY.md) |
 
 ## Architecture
 
