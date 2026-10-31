@@ -219,7 +219,7 @@ main { flex: 1; display: flex; min-height: 0; }
 .flashFace {
   grid-area: 1 / 1; backface-visibility: hidden; min-height: 104px;
   border: 1.5px solid var(--border); border-radius: 4px; box-shadow: var(--shadow);
-  padding: 14px 14px 12px;
+  padding: 34px 14px 12px;
   /* index card: ruled lines + a margin rule up top */
   background:
     linear-gradient(var(--accent) 0, var(--accent) 100%) no-repeat 0 30px / 100% 1.5px,
