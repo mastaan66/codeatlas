@@ -1,5 +1,7 @@
 # 📸 SnapStudy
 
+[![CI](https://github.com/mastaan66/snapstudy/actions/workflows/ci.yml/badge.svg)](https://github.com/mastaan66/snapstudy/actions/workflows/ci.yml)
+
 **Snap your notes. Study smarter.**
 
 Point your phone at handwritten notes, a whiteboard, or a textbook page — SnapStudy uses **Gemma 4** (multimodal) to instantly turn the photo into:
@@ -88,6 +90,14 @@ npm start
 **Processing & results** — live provider badge, loading state, then Summary / Flashcards / Quiz tabs.
 
 ![Study kit state](docs/screenshots/snapstudy-state.png)
+
+## 🧪 Tests
+
+```bash
+npm test        # node:test, zero extra dependencies
+```
+
+Fast (<1 s), fully offline: unit tests cover the strict-JSON hardening in `lib/gemma.js` (fence stripping, parse fallback, schema validation), and integration tests boot the real server on port 3102 with `GEMINI_API_KEY` cleared and `OLLAMA_URL` pointed at a dead port — so no AI provider is ever contacted — then verify `/api/health`, the 400 paths of `/api/study`, and that a full provider outage returns a graceful 5xx JSON error without crashing the server. CI runs the suite on every push and pull request (`.github/workflows/ci.yml`, Node 22).
 
 ## 📄 License
 

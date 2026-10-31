@@ -4,7 +4,8 @@
   "description": "Snap your notes, study smarter — Gemma 4 turns a photo of notes into a summary, flashcards and a quiz (English/Telugu).",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "keywords": [
     "gemma",
