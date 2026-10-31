@@ -435,3 +435,11 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 8px 16px
   .cards-grid { grid-template-columns: 1fr; }
   .loader-card, .error-card { margin-top: 4vh; }
 }
+
+/* rendered markdown inside the summary tab */
+#summary-content h1, #summary-content h2, #summary-content h3 { font-size: 16px; margin: 12px 0 6px; }
+#summary-content p { margin: 7px 0; }
+#summary-content ul, #summary-content ol { margin: 7px 0; padding-left: 22px; }
+#summary-content li { margin: 3px 0; }
+#summary-content strong { color: var(--text, inherit); }
+#summary-content code { background: var(--bg, rgba(127,127,127,.12)); border-radius: 5px; padding: 1px 5px; font-size: .9em; }

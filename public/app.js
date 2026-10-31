@@ -218,8 +218,12 @@
     $('result-thumb').src = state.previewUrl;
     applyStaticI18n();
 
-    // summary
-    $('summary-content').textContent = d.summary || '—';
+    // summary — the model writes markdown; render it (sanitized), fall back to text
+    if (window.marked && window.DOMPurify) {
+      $('summary-content').innerHTML = DOMPurify.sanitize(marked.parse(d.summary || '—'));
+    } else {
+      $('summary-content').textContent = d.summary || '—';
+    }
 
     // flashcards
     const grid = $('flashcards-grid');
