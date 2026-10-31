@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SnapStudy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📸</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Noto+Sans+Telugu:wght@400;600&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">📸</span>
+      <span class="brand-name">Snap<em>Study</em></span>
+    </div>
+    <div class="top-right">
+      <div class="lang-toggle" role="group" aria-label="Language">
+        <button id="lang-en" class="lang-btn active" data-lang="en">English</button>
+        <button id="lang-te" class="lang-btn" data-lang="te">తెలుగు</button>
+      </div>
+      <span id="provider-badge" class="badge hidden"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Upload stage -->
+    <section id="stage-upload" class="stage">
+      <h1 class="hero-title">Snap your notes.<br /><span class="accent">Study smarter.</span></h1>
+      <p class="hero-sub">Photograph handwritten notes, a whiteboard, or a textbook page — Gemma&nbsp;4 turns it into a summary, flashcards &amp; a quiz. In English or Telugu.</p>
+
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <div class="dz-inner">
+          <div class="dz-icon">🖼️</div>
+          <p class="dz-text"><strong>Drop an image here</strong> or</p>
+          <div class="dz-buttons">
+            <label class="btn btn-primary">
+              📂 Choose file
+              <input id="file-input" type="file" accept="image/*" hidden />
+            </label>
+            <label class="btn btn-secondary">
+              📷 Use camera
+              <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
+            </label>
+          </div>
+          <p class="dz-hint">JPG · PNG · HEIC — up to 15 MB</p>
+        </div>
+      </div>
+
+      <div id="preview-wrap" class="preview-wrap hidden">
+        <img id="preview-img" alt="Your uploaded notes" />
+        <div class="preview-actions">
+          <button id="generate-btn" class="btn btn-primary btn-lg">✨ Generate study kit</button>
+          <button id="clear-btn" class="btn btn-ghost">Choose another</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading stage -->
+    <section id="stage-loading" class="stage hidden">
+      <div class="loader-card">
+        <div class="scanner"><div class="scan-line"></div><span class="scan-emoji">📖</span></div>
+        <h2 id="loading-msg">Reading your notes…</h2>
+        <p class="loading-sub">Gemma 4 is working — this can take 10–60 seconds (a bit longer on local weights). Perfect time to stretch. 🧘</p>
+        <div class="progress"><div id="progress-bar" class="progress-bar"></div></div>
+      </div>
+    </section>
+
+    <!-- Results stage -->
+    <section id="stage-results" class="stage hidden">
+      <div id="notice-bar" class="notice hidden"></div>
+      <div class="results-head">
+        <div class="thumb-row">
+          <img id="result-thumb" class="thumb" alt="Source notes" />
+          <button id="new-photo-btn" class="btn btn-ghost">↺ New photo</button>
+        </div>
+        <nav class="tabs" role="tablist">
+          <button class="tab active" data-tab="summary" role="tab">📝 <span data-i18n="summary">Summary</span></button>
+          <button class="tab" data-tab="flashcards" role="tab">🃏 <span data-i18n="flashcards">Flashcards</span></button>
+          <button class="tab" data-tab="quiz" role="tab">🎯 <span data-i18n="quiz">Quiz</span></button>
+        </nav>
+      </div>
+
+      <div id="panel-summary" class="panel">
+        <div id="summary-content" class="summary-card"></div>
+      </div>
+
+      <div id="panel-flashcards" class="panel hidden">
+        <p class="panel-hint" data-i18n="fliphint">Tap a card to flip it</p>
+        <div id="flashcards-grid" class="cards-grid"></div>
+      </div>
+
+      <div id="panel-quiz" class="panel hidden">
+        <div id="quiz-area"></div>
+      </div>
+    </section>
+
+    <!-- Error stage -->
+    <section id="stage-error" class="stage hidden">
+      <div class="error-card">
+        <div class="error-icon">😵</div>
+        <h2>Something went wrong</h2>
+        <p id="error-detail"></p>
+        <button id="retry-btn" class="btn btn-primary">Try again</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Built with <strong>Gemma 4</strong> · open weights via Ollama, hosted via Gemini API · HackDay 2026
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
