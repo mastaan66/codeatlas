@@ -27,9 +27,9 @@ Built at Hacktoberfest Hack Day Hyderabad × AI Community Hyderabad, 31 Oct 2026
 | Track | Where to look |
 |---|---|
 | **Best Use of Graphify** | The knowledge graph is the product's ground truth: [`lib/indexer.js`](lib/indexer.js) builds it (`graphify extract --code-only`), [`public/app.js`](public/app.js) renders it, [`lib/graphContext.js`](lib/graphContext.js) grounds every Gemma prompt in it, and [`agent-skill/scripts/analyze_graph.py`](agent-skill/scripts/analyze_graph.py) turns it into onboarding docs |
-| **Best Use of Gemma 4** | All reasoning is Gemma 4 — `gemma-4-26b-a4b-it` via the **Gemini API** ([`lib/gemma.js`](lib/gemma.js)); multimodal image→study-kit in [`study/lib/gemma.js`](study/lib/gemma.js) with 140-language support demonstrated in English + Telugu |
+| **Best Use of Gemma 4** | All reasoning is Gemma 4 — `gemma-4-26b-a4b-it` via the **Gemini API** ([`lib/gemma.js`](lib/gemma.js)); multimodal image→study-kit in [`study/lib/gemma.js`](study/lib/gemma.js), multilinguality demonstrated in English + Telugu |
 | **Best Open-Source AI Project** | MIT-licensed; ships an **installable agent skill** ([`agent-skill/`](agent-skill/)); every surface runs **fully offline on open-weight Gemma 4 via Ollama** when no API key is set |
-| **Best Use of Cloudways** | Deployed on Cloudways Velocity — steps and graceful-degradation table in [`DEPLOY.md`](DEPLOY.md) |
+| **Best Use of Cloudways** | Built for Cloudways Velocity (Node preset, env-config, bundled seed graphs so the demo works even where the Graphify CLI can't install) — deploy steps and graceful-degradation table in [`DEPLOY.md`](DEPLOY.md); live URL added at demo time |
 
 Proof of work: 40 automated tests across three CI jobs (all offline, no API keys), real incremental commit history from event day, demo videos below.
 
@@ -98,7 +98,7 @@ cd agent-skill && python3 -m unittest discover -s tests  # agent skill (9)
 
 - **Stateless server** — graphs, tours and study kits cache on disk keyed by repo slug; the data dir can move to shared storage, so instances scale horizontally.
 - **Bounded payloads** — graphs trim to the top 4,000 symbols by connectivity before serving; a monorepo can't blow up the browser.
-- **Cheap indexing** — tree-sitter AST parsing, parallel across cores, zero model calls; shallow `--no-tags` clones; LLM calls happen only on user questions and cache afterward.
+- **Cheap indexing** — local AST parsing with zero model calls; shallow `--no-tags` clones with a size fence (413 beyond `MAX_CLONE_MB`), per-URL in-flight locks and per-IP rate limiting on `/api/index`; tours and study kits cache on disk (ask is answered live).
 - **Model-agnostic edge** — provider and model are env-switchable (`GEMINI_API_KEY`, `GEMMA_MODEL`, `OLLAMA_URL`, `OLLAMA_FALLBACK`).
 
 ## Security notes

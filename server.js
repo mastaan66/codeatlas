@@ -28,11 +28,30 @@ app.get('/api/repos', (req, res) => {
 });
 
 // Index a public GitHub repo: shallow clone + graphify extract (local AST parsing).
+// Hardened: naive per-IP rate limit and a per-URL in-flight lock, so concurrent
+// requests can't race the clone or use the endpoint as a disk-filling vector.
+const indexHits = new Map(); // ip -> timestamps
+const inFlight = new Map(); // repoUrl -> promise
+const INDEX_LIMIT = Number(process.env.INDEX_RATE_LIMIT || 5); // per 10 min per IP
+
 app.post('/api/index', async (req, res) => {
   try {
+    const now = Date.now();
+    const hits = (indexHits.get(req.ip) || []).filter((t) => now - t < 600000);
+    if (hits.length >= INDEX_LIMIT) {
+      return res.status(429).json({ error: 'too many index requests — try again in a few minutes' });
+    }
+    hits.push(now);
+    indexHits.set(req.ip, hits);
+
     const { repoUrl } = req.body || {};
-    const result = await indexRepo(DATA_DIR, repoUrl);
-    res.json(result);
+    const key = String(repoUrl || '').trim();
+    let job = inFlight.get(key);
+    if (!job) {
+      job = indexRepo(DATA_DIR, key).finally(() => inFlight.delete(key));
+      inFlight.set(key, job);
+    }
+    res.json(await job);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

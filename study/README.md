@@ -1,6 +1,6 @@
 # 📸 SnapStudy
 
-[![CI](https://github.com/mastaan66/snapstudy/actions/workflows/ci.yml/badge.svg)](https://github.com/mastaan66/snapstudy/actions/workflows/ci.yml)
+[![CI](https://github.com/mastaan66/codeatlas/actions/workflows/ci.yml/badge.svg)](https://github.com/mastaan66/codeatlas/actions/workflows/ci.yml)
 
 **Snap your notes. Study smarter.**
 
