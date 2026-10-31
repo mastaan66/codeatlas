@@ -20,7 +20,8 @@ init();
 function theme() {
   const t = document.documentElement.dataset.theme;
   if (t === 'light' || t === 'dark') return t;
-  return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  // Paper notebook is the brand default; night notebook follows the OS.
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 const colorFor = (community) => {
   const slot = communityRank.get(community);
@@ -40,7 +41,18 @@ async function init() {
   $('#helpBtn').addEventListener('click', () => $('#helpCard').classList.toggle('hidden'));
   $('#zoomIn').addEventListener('click', () => zoomBy(1.35));
   $('#zoomOut').addEventListener('click', () => zoomBy(1 / 1.35));
-  $('#zoomFit').addEventListener('click', () => fitToView(500));
+  $('#zoomFit').addEventListener('click', () => { focusedNode = null; if (window._nodesSel) unspotlight(window._linksSel, window._nodesSel); fitToView(500); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#fileDialog').open) defocus(); });
+  $('#search').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !currentGraph) return;
+    e.preventDefault();
+    const q = e.target.value.toLowerCase().trim();
+    if (!q) return;
+    const hit = [...currentGraph.nodes]
+      .filter((n) => n.label.toLowerCase().includes(q))
+      .sort((a, b) => b.degree - a.degree)[0];
+    if (hit) { showNode(hit); focusNode(hit); }
+  });
   $('#themeBtn').addEventListener('click', toggleTheme);
   $('#fileDialogClose').addEventListener('click', () => $('#fileDialog').close());
   $('#fileDialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
@@ -113,16 +125,42 @@ async function onIndex(e) {
   }
 }
 
+let fullGraph = null;
+let showMeta = false;
+
 async function loadRepo(slug) {
   currentSlug = slug;
   $('#tour').textContent = '';
   $('#answer').textContent = '';
   setStatus('Loading graph…');
-  const graph = await fetchJSON('/api/graph/' + encodeURIComponent(slug));
+  fullGraph = await fetchJSON('/api/graph/' + encodeURIComponent(slug));
   setStatus(null);
-  $('#graphMeta').textContent =
-    `${slug} · ${graph.stats.nodes} symbols · ${graph.stats.links} links · ${graph.stats.communities} modules`;
+  applyMetaFilter();
+}
+
+// Keep the map about code: config/manifest/CI/doc symbols hide behind a toggle.
+function applyMetaFilter() {
+  const nodes = fullGraph.nodes.filter((n) => showMeta || !n.meta);
+  const keep = new Set(nodes.map((n) => n.id));
+  const links = fullGraph.links
+    .map((l) => ({ source: l.source.id ?? l.source, target: l.target.id ?? l.target, rel: l.rel }))
+    .filter((l) => keep.has(l.source) && keep.has(l.target));
+  const communities = new Set(nodes.map((n) => n.community));
+  const hidden = fullGraph.nodes.length - nodes.length;
+  const graph = { slug: fullGraph.slug, nodes, links,
+    stats: { nodes: nodes.length, links: links.length, communities: communities.size } };
+  $('#graphMeta').innerHTML =
+    `${esc(fullGraph.slug)} · ${graph.stats.nodes} symbols · ${graph.stats.links} links · ${graph.stats.communities} modules` +
+    (hidden > 0 || showMeta
+      ? ` · <label class="metaToggle"><input type="checkbox" id="metaToggle"${showMeta ? ' checked' : ''}> config & deps${hidden ? ` (${hidden})` : ''}</label>`
+      : '');
+  const t = $('#metaToggle');
+  if (t) t.addEventListener('change', (e) => { showMeta = e.target.checked; applyMetaFilter(); });
   drawGraph(graph);
+}
+
+function topByDegreeLocal(nodes, n) {
+  return [...nodes].sort((a, b) => b.degree - a.degree).slice(0, n);
 }
 
 function rankCommunities(graph) {
@@ -148,9 +186,18 @@ function renderLegend() {
     }
     topFiles.set(c, Object.entries(dirs).sort((a, b) => b[1] - a[1])[0]?.[0] || `module ${c}`);
   }
+  // Disambiguate modules that share a directory by naming their hub symbol.
+  const dirCounts = {};
+  for (const [c] of top) dirCounts[topFiles.get(c)] = (dirCounts[topFiles.get(c)] || 0) + 1;
+  const nameFor = (c) => {
+    const dir = topFiles.get(c);
+    if (dirCounts[dir] <= 1) return dir;
+    const hub = topByDegreeLocal(currentGraph.nodes.filter((n) => n.community === c), 1)[0];
+    return `${dir} — ${hub ? hub.label : 'module ' + c}`;
+  };
   const others = [...sizes.keys()].length - top.length;
   $('#legend').innerHTML = '<h4>Modules</h4>' + top.map(([c, n]) =>
-    `<div class="row"><i class="sw" style="background:${colorFor(c)}"></i><span>${esc(topFiles.get(c))} · ${n}</span></div>`
+    `<div class="row"><i class="sw" style="background:${colorFor(c)}"></i><span>${esc(nameFor(c))} · ${n}</span></div>`
   ).join('') + (others > 0
     ? `<div class="row"><i class="sw" style="background:${OTHER_COLOR[theme()]}"></i><span>${others} smaller modules</span></div>`
     : '');
@@ -159,6 +206,7 @@ function renderLegend() {
 
 function drawGraph(graph) {
   currentGraph = graph;
+  focusedNode = null;
   rankCommunities(graph);
   const svg = d3.select('#graph');
   svg.selectAll('*').remove();
@@ -179,10 +227,13 @@ function drawGraph(graph) {
     .attr('fill', (d) => colorFor(d.community))
     .attr('stroke', 'var(--bg)')
     .style('cursor', 'pointer')
-    .on('click', (ev, d) => showNode(d))
-    .on('mouseenter', (ev, d) => spotlight(d, link, node))
+    .on('click', (ev, d) => { ev.stopPropagation(); showNode(d); focusNode(d); })
+    .on('mouseenter', (ev, d) => { if (!focusedNode) spotlight(d, link, node); })
     .on('mousemove', (ev) => moveTooltip(ev))
-    .on('mouseleave', () => unspotlight(link, node));
+    .on('mouseleave', () => { if (!focusedNode) unspotlight(link, node); });
+
+  // Click empty canvas or press Escape to release focus (Meet-style pull-back).
+  svg.on('dblclick', () => defocus());
 
   // Label the hubs: top 22 by degree, with a surface-colored halo for legibility.
   const labelCut = [...graph.nodes].sort((a, b) => b.degree - a.degree)[Math.min(21, graph.nodes.length - 1)]?.degree ?? 0;
@@ -235,6 +286,49 @@ function fitToView(ms) {
 
 function zoomBy(factor) {
   d3.select('#graph').transition().duration(220).call(zoomBehavior.scaleBy, factor);
+}
+
+/* ---- Meet-style focus: fly the camera to a node and its neighborhood ---- */
+let focusedNode = null;
+
+function neighborhoodOf(d) {
+  const ids = new Set([d.id]);
+  for (const l of currentGraph.links) {
+    const s = l.source.id ?? l.source;
+    const t = l.target.id ?? l.target;
+    if (s === d.id) ids.add(t);
+    if (t === d.id) ids.add(s);
+  }
+  return ids;
+}
+
+function focusNode(d) {
+  focusedNode = d;
+  const ids = neighborhoodOf(d);
+  const pts = currentGraph.nodes.filter((n) => ids.has(n.id) && Number.isFinite(n.x));
+  if (!pts.length || !zoomBehavior) return;
+  const svg = d3.select('#graph');
+  const { width, height } = svg.node().getBoundingClientRect();
+  const xs = pts.map((n) => n.x);
+  const ys = pts.map((n) => n.y);
+  const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  const pad = 120;
+  const k = Math.max(0.3, Math.min(4.5,
+    0.9 / Math.max((x1 - x0 + pad) / width, (y1 - y0 + pad) / height, 1e-6)));
+  const t = d3.zoomIdentity
+    .translate(width / 2 - k * (x0 + x1) / 2, height / 2 - k * (y0 + y1) / 2)
+    .scale(k);
+  svg.transition().duration(820).ease(d3.easeCubicInOut).call(zoomBehavior.transform, t);
+  if (window._nodesSel && window._linksSel) spotlight(d, window._linksSel, window._nodesSel);
+  $('#tooltip').style.display = 'none'; // focus is a click, not a hover
+}
+
+function defocus() {
+  if (!focusedNode) return;
+  focusedNode = null;
+  if (window._nodesSel && window._linksSel) unspotlight(window._linksSel, window._nodesSel);
+  fitToView(820);
 }
 
 function spotlight(d, link, node) {
