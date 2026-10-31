@@ -82,9 +82,13 @@ All of it collapses to instant, motion-free states under `prefers-reduced-motion
 
 ## Screenshots
 
-**Explore** — memolite mapped; Lumenar "engineer's notebook" design, light and dark.
+**Explore** — memolite mapped; Lumenar "engineer's notebook" design in the paper notebook…
 
-![Knowledge graph of memolite on a graph-paper canvas with a handwritten modules legend](docs/screenshots/graph.png)
+![Knowledge graph of memolite on a graph-paper canvas with a handwritten modules legend, light theme](docs/screenshots/graph.png)
+
+…and the night notebook.
+
+![The same graph in the dark night-notebook theme](docs/screenshots/graph-dark.png)
 
 **Ask** — Gemma 4 answers from the graph, with file:line citations.
 
