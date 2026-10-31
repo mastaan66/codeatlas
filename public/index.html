@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeAtlas</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">⬢ Code<span>Atlas</span></div>
+  <form id="indexForm">
+    <input id="repoUrl" type="url" placeholder="https://github.com/owner/repo" required>
+    <button type="submit" id="indexBtn">Map it</button>
+  </form>
+  <select id="repoSelect" title="Indexed repos"></select>
+  <span id="providerBadge" class="badge"></span>
+</header>
+
+<main>
+  <section id="graphPane">
+    <div id="graphMeta"></div>
+    <input id="search" placeholder="Search symbols…">
+    <svg id="graph"></svg>
+    <div id="status" class="hidden"></div>
+  </section>
+
+  <aside id="sidePane">
+    <nav>
+      <button class="tab active" data-tab="node">Symbol</button>
+      <button class="tab" data-tab="ask">Ask</button>
+      <button class="tab" data-tab="tour">Tour</button>
+    </nav>
+    <div id="tab-node" class="tabPanel active">
+      <p class="muted">Click a node to inspect it. Node size = connectivity; color = module (community) detected by Graphify.</p>
+      <div id="nodeDetails"></div>
+    </div>
+    <div id="tab-ask" class="tabPanel">
+      <textarea id="question" rows="3" placeholder="How does authentication reach the database?"></textarea>
+      <button id="askBtn">Ask Gemma 4</button>
+      <div id="answer" class="prose"></div>
+    </div>
+    <div id="tab-tour" class="tabPanel">
+      <button id="tourBtn">Generate onboarding tour</button>
+      <div id="tour" class="prose"></div>
+    </div>
+  </aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
