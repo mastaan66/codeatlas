@@ -70,7 +70,7 @@ npm start
 
 ## 🔌 API
 
-- `POST /api/study` — multipart: `image` (file), `language` (`en`|`te`), `mode` (`all`) → `{summary, flashcards:[{front,back}], quiz:[{question, options[4], answerIndex, explanation}], provider, providerLabel}`
+- `POST /api/study` — multipart: `image` (file), `language` (`en`|`te`) → `{summary, flashcards:[{front,back}], quiz:[{question, options[4], answerIndex, explanation}], provider, providerLabel}`
 - `GET /api/health` — `{ok, provider, providerLabel}`
 
 ## 📱 Demo flow (60 seconds)

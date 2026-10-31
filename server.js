@@ -47,6 +47,15 @@ app.post('/api/study', upload.single('image'), async (req, res) => {
   }
 });
 
+// Keep the JSON error contract even for errors thrown before route handlers
+// (e.g. multer file-size/field rejections, which otherwise render HTML 500s).
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.name === 'MulterError' ? 400 : err.status || 500;
+  console.error('[error]', err.message);
+  res.status(status).json({ error: err.message || 'Internal error' });
+});
+
 const server = app.listen(PORT, () => {
   console.log(`SnapStudy listening on http://localhost:${PORT}`);
   console.log(
