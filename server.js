@@ -46,6 +46,35 @@ app.get('/api/graph/:slug', (req, res) => {
   }
 });
 
+// Serve one source file from an indexed repo (read-only, bounded, traversal-safe).
+const MAX_FILE_BYTES = 200 * 1024;
+app.get('/api/file/:slug', (req, res) => {
+  try {
+    const slug = repoSlug(req.params.slug);
+    const rel = String(req.query.path || '');
+    if (!rel || rel.includes('\0') || path.isAbsolute(rel)) {
+      return res.status(400).json({ error: 'relative path required' });
+    }
+    const repoDir = path.join(DATA_DIR, 'repos', slug);
+    const abs = path.resolve(repoDir, rel);
+    if (!abs.startsWith(repoDir + path.sep)) {
+      return res.status(400).json({ error: 'path escapes repository' });
+    }
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      return res.status(404).json({ error: 'source not available here (repo was indexed elsewhere or file is gone)' });
+    }
+    const buf = fs.readFileSync(abs).subarray(0, MAX_FILE_BYTES);
+    if (buf.includes(0)) return res.status(415).json({ error: 'binary file' });
+    res.json({
+      path: rel,
+      content: buf.toString('utf8'),
+      truncated: fs.statSync(abs).size > MAX_FILE_BYTES,
+    });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 // Ask a question about an indexed repo; graph context keeps Gemma grounded.
 app.post('/api/ask', async (req, res) => {
   try {

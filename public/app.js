@@ -42,6 +42,8 @@ async function init() {
   $('#zoomOut').addEventListener('click', () => zoomBy(1 / 1.35));
   $('#zoomFit').addEventListener('click', () => fitToView(500));
   $('#themeBtn').addEventListener('click', toggleTheme);
+  $('#fileDialogClose').addEventListener('click', () => $('#fileDialog').close());
+  $('#fileDialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   syncThemeButton();
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
     document.querySelectorAll('.tab, .tabPanel').forEach((el) => el.classList.remove('active'));
@@ -270,11 +272,52 @@ function showNode(d) {
   $('#nodeDetails').innerHTML = `
     <div class="kv">
       <div><b>${esc(d.label)}</b></div>
-      <div>File: ${esc(d.file || '—')}${d.loc ? ' · ' + esc(d.loc) : ''}</div>
+      <div>File: ${d.file
+        ? `<span class="filelink" data-path="${esc(d.file)}" data-loc="${esc(d.loc || '')}">${esc(d.file)}</span>${d.loc ? ' · ' + esc(d.loc) : ''}`
+        : '—'}</div>
       <div>Module (community): ${d.community}</div>
       <div>Connections: ${d.degree}</div>
       <div>${d.callable ? 'Callable (function/class)' : 'Symbol'}</div>
     </div>`;
+  const link = $('#nodeDetails .filelink');
+  if (link) link.addEventListener('click', () => openFile(link.dataset.path, link.dataset.loc));
+}
+
+/* ---- file viewer ---- */
+async function openFile(relPath, loc) {
+  if (!currentSlug || !relPath) return;
+  const dlg = $('#fileDialog');
+  $('#fileDialogPath').textContent = relPath + (loc ? ` · ${loc}` : '');
+  $('#fileContent').textContent = 'Loading…';
+  dlg.showModal();
+  try {
+    const { content, truncated } = await fetchJSON(
+      `/api/file/${encodeURIComponent(currentSlug)}?path=${encodeURIComponent(relPath)}`);
+    const hitLine = loc && /^L(\d+)/.exec(loc) ? Number(RegExp.$1) : -1;
+    const rows = content.split('\n').map((line, i) =>
+      `<div class="ln${i + 1 === hitLine ? ' hit' : ''}"><span class="no">${i + 1}</span><code>${esc(line)}</code></div>`);
+    if (truncated) rows.push('<div class="ln"><span class="no">…</span><code>(truncated at 200 KB)</code></div>');
+    $('#fileContent').innerHTML = rows.join('');
+    const hit = $('#fileContent .hit');
+    if (hit) hit.scrollIntoView({ block: 'center' });
+  } catch (err) {
+    $('#fileContent').textContent = err.message;
+  }
+}
+
+// Make file paths inside rendered ask/tour markdown clickable.
+function wireFileLinks(container) {
+  if (!currentGraph) return;
+  const files = new Set(currentGraph.nodes.map((n) => n.file).filter(Boolean));
+  container.querySelectorAll('code').forEach((c) => {
+    const t = c.textContent.trim();
+    const match = files.has(t) ? t : [...files].find((f) => f.endsWith('/' + t) || f === t);
+    if (match) {
+      c.classList.add('filelink');
+      c.title = 'Open ' + match;
+      c.addEventListener('click', () => openFile(match, ''));
+    }
+  });
 }
 
 function onSearch(e) {
@@ -325,6 +368,7 @@ function renderMarkdown(el, md, provider) {
     el.classList.add('md');
     el.innerHTML = DOMPurify.sanitize(marked.parse(md || '')) +
       (provider ? `<p class="muted">— ${esc(provider)}</p>` : '');
+    wireFileLinks(el);
   } else {
     el.textContent = md + (provider ? `\n\n— ${provider}` : '');
   }

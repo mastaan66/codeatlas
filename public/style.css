@@ -177,6 +177,34 @@ main { flex: 1; display: flex; min-height: 0; }
   fill: var(--text); font-size: 12px; font-weight: 600; pointer-events: none;
   paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
 }
+/* ---- file viewer dialog ---- */
+#fileDialog {
+  width: min(900px, 92vw); max-height: 86vh; padding: 0;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+}
+#fileDialog::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(2px); }
+#fileDialog header {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+  position: sticky; top: 0;
+}
+#fileDialogPath { font: 13px monospace; color: var(--accent); word-break: break-all; }
+#fileContent {
+  margin: 0; padding: 12px 0; overflow: auto; max-height: calc(86vh - 56px);
+  font: 12.5px/1.6 ui-monospace, monospace; background: var(--bg);
+}
+#fileContent .ln { display: flex; padding: 0 14px; }
+#fileContent .ln:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+#fileContent .ln.hit { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#fileContent .no {
+  color: var(--muted); min-width: 44px; text-align: right; padding-right: 14px;
+  user-select: none; flex: none;
+}
+#fileContent code { white-space: pre; }
+.filelink { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
+.prose.md code.filelink { border-color: var(--accent); }
+
 @media (max-width: 760px) {
   main { flex-direction: column; }
   #sidePane { width: 100%; height: 45%; }

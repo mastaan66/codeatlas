@@ -123,3 +123,17 @@ test('POST /api/index with a bad URL is a 400', async () => {
   assert.strictEqual(res.status, 400);
   assert.match(res.json.error, /GitHub URL/);
 });
+
+test('GET /api/file rejects traversal and absolute paths', async () => {
+  const esc = await request('GET', '/api/file/memolite?path=' + encodeURIComponent('../../../../etc/passwd'));
+  assert.strictEqual(esc.status, 400);
+  const abs = await request('GET', '/api/file/memolite?path=' + encodeURIComponent('/etc/passwd'));
+  assert.strictEqual(abs.status, 400);
+});
+
+test('GET /api/file for a file absent locally is a clean 404', async () => {
+  // In CI data/repos is empty (gitignored), so the seeded repo has no sources on disk.
+  const res = await request('GET', '/api/file/memolite?path=definitely/not/here.py');
+  assert.strictEqual(res.status, 404);
+  assert.match(res.json.error, /not available/);
+});
