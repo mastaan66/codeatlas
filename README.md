@@ -1,12 +1,22 @@
 # ⬢ CodeAtlas
 
-**Paste a GitHub repo. Get a living map of the codebase — and a Gemma 4 guide who's actually read it.**
+**Paste a GitHub repo. Get a living map of the codebase — and a Gemma 4 guide who's actually read it. Humans get the atlas; your coding agent gets the same graph as a skill.**
 
 Built at Hacktoberfest Hack Day Hyderabad × AI Community Hyderabad, 31 Oct 2026.
 
 ## The problem
 
-Joining a codebase is the slowest part of contributing to open source. READMEs go stale; grepping gives you trees, never the forest. CodeAtlas turns any public repo into an interactive knowledge graph and puts an AI guide on top of it that answers from the *graph*, not from vibes.
+Joining a codebase is the slowest part of contributing to open source. READMEs go stale; grepping gives you trees, never the forest. And it's not just humans anymore — coding agents burn their context windows rediscovering the same structure on every task.
+
+CodeAtlas builds one ground truth — a [Graphify](https://github.com/Graphify-Labs/graphify) knowledge graph — and serves it to every consumer:
+
+| Surface | Consumer | What they get |
+|---|---|---|
+| **The atlas** (web app) | humans exploring | interactive force-graph map, search, file viewer |
+| **Ask & Tour** (Gemma 4) | humans learning | graph-grounded Q&A + a generated onboarding tour |
+| **repo-tour** (`agent-skill/`) | coding agents | an installable skill that writes ONBOARDING / ARCHITECTURE / GOOD-FIRST-SPOTS docs from the graph — fully offline-capable on open-weight Gemma |
+
+Same `graph.json`. One use case — *understand this codebase* — three doors in.
 
 ## What it does
 
@@ -33,10 +43,18 @@ Joining a codebase is the slowest part of contributing to open source. READMEs g
 
 | Track | How CodeAtlas qualifies |
 |---|---|
-| Best Use of Graphify | Graphify's knowledge graph is the core data structure: the viz, the Q&A grounding, and the tour are all built from `graph.json` |
+| Best Use of Graphify | Graphify's knowledge graph is the core data structure: the viz, the Q&A grounding, the tour, and the agent skill are all built from `graph.json` |
 | Best Use of Gemma 4 | All reasoning runs on Gemma 4 — `gemma-4-26b-a4b-it` via the Gemini API |
-| Best Open-Source AI Project | MIT-licensed; runs fully offline on **open-weight Gemma 4 via Ollama** when no API key is set |
+| Best Open-Source AI Project | MIT-licensed, **ships an installable agent skill** (`agent-skill/`), and runs fully offline on **open-weight Gemma 4 via Ollama** |
 | Best Use of Cloudways | Deployed live on Cloudways — see [DEPLOY.md](DEPLOY.md) |
+
+## The agent skill (`agent-skill/`)
+
+The same graph that powers the atlas installs into Claude Code or opencode as the **repo-tour** skill: say *"give me a tour of this repo"* and the agent generates `ONBOARDING.md`, `ARCHITECTURE.md` (with a mermaid module diagram), and `GOOD-FIRST-SPOTS.md` — grounded in the graph, never invented, and generatable fully offline via local open-weight Gemma. See [agent-skill/README.md](agent-skill/README.md); real example output for a 451-symbol repo is committed under [agent-skill/examples/memolite/](agent-skill/examples/memolite/).
+
+```bash
+cd agent-skill && ./install.sh   # installs the skill into Claude Code (and opencode if present)
+```
 
 ## Architecture
 
