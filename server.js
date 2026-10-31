@@ -55,7 +55,7 @@ app.post('/api/ask', async (req, res) => {
     }
     const graph = loadGraph(DATA_DIR, slug);
     const context = buildQuestionContext(graph, question);
-    const prompt = `You are CodeAtlas, a codebase guide. Answer using ONLY the knowledge-graph context below. Cite symbols and files by name. If the context is insufficient, say what is missing — never invent symbols.
+    const prompt = `You are CodeAtlas, a codebase guide. Answer using ONLY the knowledge-graph context below. Cite symbols and files by name. If the context is insufficient, say what is missing — never invent symbols. Reply with the final answer only, as concise markdown prose — no preamble, no restating these instructions, no step-by-step reasoning.
 
 ## Knowledge graph context for repo "${slug}"
 ${context}
@@ -79,7 +79,7 @@ app.get('/api/tour/:slug', async (req, res) => {
     }
     const graph = loadGraph(DATA_DIR, slug);
     const context = buildTourContext(graph);
-    const prompt = `You are CodeAtlas. Write a guided onboarding tour of the repo "${slug}" for a new contributor, based ONLY on the knowledge-graph digest below. Structure it as 4-7 numbered stops. Each stop: a markdown heading, which files/symbols to read (real names from the digest only), and one sentence on why this stop matters. Start with entry points, end with "where to make your first change". Keep it under 500 words.
+    const prompt = `You are CodeAtlas. Write a guided onboarding tour of the repo "${slug}" for a new contributor, based ONLY on the knowledge-graph digest below. Structure it as 4-7 numbered stops. Each stop: a markdown heading, which files/symbols to read (real names from the digest only), and one sentence on why this stop matters. Start with entry points, end with "where to make your first change". Keep it under 500 words. Output the tour directly as markdown — no preamble and no reasoning.
 
 ## Knowledge graph digest
 ${context}`;
