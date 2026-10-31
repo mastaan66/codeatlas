@@ -41,8 +41,8 @@ app.post('/api/study', upload.single('image'), async (req, res) => {
   } catch (err) {
     console.error('[/api/study]', err.message);
     res.status(502).json({
-      error: 'Generation failed on all providers.',
-      detail: err.providerErrors || err.message,
+      error: err.message || 'Generation failed on all providers.',
+      detail: err.providerErrors,
     });
   }
 });
@@ -58,10 +58,16 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, () => {
   console.log(`SnapStudy listening on http://localhost:${PORT}`);
+  const fb = String(process.env.OLLAMA_FALLBACK || '').trim().toLowerCase();
+  const ollamaOn = ['on', '1', 'true', 'yes'].includes(fb) || (!fb && !process.env.GEMINI_API_KEY);
   console.log(
     process.env.GEMINI_API_KEY
-      ? 'Primary provider: Gemini API (hosted Gemma 4), fallback: local Ollama'
-      : 'No GEMINI_API_KEY — using local Ollama (Gemma 4 open weights)'
+      ? `Primary provider: Gemini API (hosted Gemma 4); local Ollama fallback: ${
+          ollamaOn ? 'on' : 'off (set OLLAMA_FALLBACK=on to enable)'
+        }`
+      : ollamaOn
+        ? 'No GEMINI_API_KEY — using local Ollama (Gemma 4 open weights)'
+        : 'No provider configured: GEMINI_API_KEY unset and OLLAMA_FALLBACK=off'
   );
 });
 

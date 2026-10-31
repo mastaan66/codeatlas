@@ -181,7 +181,12 @@
     form.append('mode', 'all');
 
     try {
-      const res = await fetch('/api/study', { method: 'POST', body: form });
+      const res = await fetch('/api/study', {
+        method: 'POST',
+        body: form,
+        // Don't hang forever: hosted generation finishes well within 2 minutes.
+        signal: AbortSignal.timeout(120000),
+      });
       const data = await res.json().catch(() => null);
       stopLoadingFx();
       if (!res.ok || !data || data.error) {
@@ -192,7 +197,17 @@
       show('results');
     } catch (err) {
       stopLoadingFx();
-      $('error-detail').textContent = String(err.message || err).slice(0, 400);
+      let msg;
+      if (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        msg = 'The request timed out after 2 minutes. The model may be overloaded — press “Try again”.';
+      } else if (err instanceof TypeError) {
+        // fetch() rejects with TypeError only on network-level failures
+        // (server down, connection dropped mid-request) — not on HTTP errors.
+        msg = 'Could not reach the SnapStudy server — is it running on port 3002? Start it, then press “Try again”.';
+      } else {
+        msg = String(err.message || err);
+      }
+      $('error-detail').textContent = msg.slice(0, 400);
       show('error');
     }
   }
