@@ -4,7 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Node >= 20](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)](package.json)
 
-**Turn any repo into a living knowledge graph, then serve it to every consumer — humans get an interactive atlas, a Gemma 4 guide, and flashcards; coding agents get the same graph as an installable skill.**
+**Every codebase greets a newcomer the same way: ten thousand files and no map.** The README went stale the week it was written. Grep hands you trees, never the forest. You read `store.py` on Monday and can't place it by Thursday. And now coding agents wait in the same queue, burning their context windows rediscovering the same architecture on every single task.
+
+**So we built the map.** CodeAtlas turns any repo into a living knowledge graph — parsed locally from the AST in seconds, no LLM needed to build it — and opens four doors into that one ground truth: an atlas you explore, a Gemma 4 guide who cites `file:line` and can't invent symbols, flashcards that make the architecture stick, and an installable skill that hands the whole map to your coding agent.
 
 <img src="docs/architecture.png" width="100%" alt="Hand-drawn architecture sketch: a GitHub repo URL flows into graphify extract (tree-sitter AST, local, no LLM), producing graph.json — the knowledge graph. Four arrows fan out to the surfaces: Map (d3 force atlas, humans explore), Ask + Tour (Gemma 4, graph-grounded, humans learn), Study (flashcards and quiz from the graph, humans drill), and the repo-tour agent skill (ONBOARDING / ARCHITECTURE docs for coding agents). A second input, a photo of your notes, flows into SnapStudy (multimodal Gemma 4 → summary, flashcards, quiz in English and Telugu), joining the Study surface. Engine strip below: Gemma 4 via the Gemini API with a fallback arrow to Ollama (open weights, offline); deployed on Cloudways. Caption: one graph, every consumer.">
 
@@ -50,20 +52,28 @@ cd study && npm install && npm start # → http://localhost:3002
 
 Requires Node ≥ 20 and `git`; live indexing needs the Graphify CLI (`uv tool install graphifyy`); offline mode needs Ollama with `ollama pull gemma4`.
 
-## The problem
+## The pain, door by door
 
-Joining a codebase is the slowest part of contributing to open source. READMEs go stale; grepping gives you trees, never the forest. And it's not just humans anymore — coding agents burn their context windows rediscovering the same structure on every task.
-
-CodeAtlas builds one ground truth — a [Graphify] knowledge graph — and opens four doors into it:
-
-| Surface | Consumer | What they get |
+| You say | CodeAtlas answers with | How it solves it |
 |---|---|---|
-| **Map** | humans exploring | force-directed atlas: color = module, size = connectivity; search, Meet-style fly-to-focus, click-through file viewer |
-| **Ask + Tour** | humans learning | Gemma 4 Q&A grounded in the graph (file:line citations, forbidden from inventing symbols) + a generated onboarding tour |
-| **Study** | humans drilling | flashcards and a pop quiz written *from the graph* — onboarding a codebase is studying it; plus [`study/`](study/) turns a photo of handwritten notes into the same study kit, in English or Telugu |
-| **repo-tour** | coding agents | installable skill that writes `ONBOARDING.md`, `ARCHITECTURE.md` (mermaid module diagram) and `GOOD-FIRST-SPOTS.md` from the graph — real output committed at [`agent-skill/examples/memolite/`](agent-skill/examples/memolite/) |
+| *"Where do I even start?"* | **Map** | a force-directed atlas of the real structure — color = module, size = connectivity; search, Meet-style fly-to-focus, click any symbol through to its source. Config noise (manifests, CI yaml, lockfiles) folds behind a toggle, so modules mean architecture, not plumbing |
+| *"How does the CLI reach the storage layer?"* | **Ask + Tour** | Gemma 4 answers **from the graph** — `file:line` citations, forbidden from inventing symbols, honest when the graph can't say — plus a one-click onboarding tour from entry points to your first change |
+| *"I read it. Will I remember it?"* | **Study** | flashcards and a pop quiz written *from the graph* — onboarding a codebase is studying it. And [`study/`](study/) extends the same idea to paper: photograph handwritten notes or a whiteboard, get the same study kit back, in English or తెలుగు |
+| *"My agent re-reads the repo every task"* | **repo-tour** | an installable agent skill that writes `ONBOARDING.md`, `ARCHITECTURE.md` (mermaid module diagram) and `GOOD-FIRST-SPOTS.md` from the graph once — real committed output at [`agent-skill/examples/memolite/`](agent-skill/examples/memolite/) |
 
-Noise stays off the map: manifests, CI yaml, lockfiles and docs are flagged and folded behind a *config & deps* toggle, so modules mean architecture, not plumbing.
+Four doors, one [Graphify] ground truth: the graph is built once, locally, and every surface — human or agent, online or offline — reads from it.
+
+## Motion that means something
+
+Every animation answers a user action — nothing wiggles for decoration:
+
+- **Meet-style focus** — click a symbol (or hit Enter in search) and the camera flies in to frame it with its neighbors, the way a meeting spotlights the speaker; `Esc` or a double-click on the canvas pulls back to the full map.
+- **Spotlight hover** — rest on a node and its neighborhood lights up while everything else fades, so you read one dependency story at a time.
+- **Auto-fit** — the graph frames itself as the force layout settles; `⛶` re-fits anytime.
+- **Index-card flips** — Study flashcards flip in 3D like the real thing; the correct quiz answer gets an animated highlighter sweep, straight off the Lumenar notebook.
+- **Theme flip** — one click between the paper notebook and the night notebook, persisted per device.
+
+All of it collapses to instant, motion-free states under `prefers-reduced-motion`.
 
 ## Demos
 
