@@ -81,11 +81,13 @@ npm start
 
 ## 📷 Screenshots
 
-*(coming — add before submission)*
+**Upload** — drag-and-drop, file picker, or phone camera capture.
 
-| Upload | Flashcards | Quiz (Telugu) |
-|---|---|---|
-| _screenshot_ | _screenshot_ | _screenshot_ |
+![Upload screen](docs/screenshots/snapstudy-upload.png)
+
+**Processing & results** — live provider badge, loading state, then Summary / Flashcards / Quiz tabs.
+
+![Study kit state](docs/screenshots/snapstudy-state.png)
 
 ## 📄 License
 
