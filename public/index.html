@@ -13,7 +13,7 @@
     } catch (e) {}
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Noto+Sans+Telugu:wght@400;600&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu:wght@400;600&display=swap" />
   <link rel="stylesheet" href="style.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
@@ -23,6 +23,7 @@
     <div class="brand">
       <span class="brand-mark">📸</span>
       <span class="brand-name">Snap<em>Study</em></span>
+      <span class="brand-tagline">photograph it. learn it.</span>
     </div>
     <div class="top-right">
       <div class="lang-toggle" role="group" aria-label="Language">
@@ -45,15 +46,15 @@
 
       <div id="dropzone" class="dropzone" tabindex="0">
         <div class="dz-inner">
-          <div class="dz-icon">🖼️</div>
+          <div class="dz-icon">tape your notes here ↓</div>
           <p class="dz-text"><strong>Drop an image here</strong> or</p>
           <div class="dz-buttons">
             <label class="btn btn-primary">
-              📂 Choose file
+              Choose file
               <input id="file-input" type="file" accept="image/*" hidden />
             </label>
             <label class="btn btn-secondary">
-              📷 Use camera
+              Use camera
               <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
             </label>
           </div>
@@ -64,7 +65,7 @@
       <div id="preview-wrap" class="preview-wrap hidden">
         <img id="preview-img" alt="Your uploaded notes" />
         <div class="preview-actions">
-          <button id="generate-btn" class="btn btn-primary btn-lg">✨ Generate study kit</button>
+          <button id="generate-btn" class="btn btn-primary btn-lg">Generate study kit</button>
           <button id="clear-btn" class="btn btn-ghost">Choose another</button>
         </div>
       </div>
@@ -75,7 +76,7 @@
       <div class="loader-card">
         <div class="scanner"><div class="scan-line"></div><span class="scan-emoji">📖</span></div>
         <h2 id="loading-msg">Reading your notes…</h2>
-        <p class="loading-sub">Gemma 4 is working — this can take 10–60 seconds (a bit longer on local weights). Perfect time to stretch. 🧘</p>
+        <p class="loading-sub">Gemma 4 is working — this can take 10–60 seconds (a bit longer on local weights). Perfect time to stretch.</p>
         <div class="progress"><div id="progress-bar" class="progress-bar"></div></div>
       </div>
     </section>
@@ -89,9 +90,9 @@
           <button id="new-photo-btn" class="btn btn-ghost">↺ New photo</button>
         </div>
         <nav class="tabs" role="tablist">
-          <button class="tab active" data-tab="summary" role="tab">📝 <span data-i18n="summary">Summary</span></button>
-          <button class="tab" data-tab="flashcards" role="tab">🃏 <span data-i18n="flashcards">Flashcards</span></button>
-          <button class="tab" data-tab="quiz" role="tab">🎯 <span data-i18n="quiz">Quiz</span></button>
+          <button class="tab active" data-tab="summary" role="tab"><span data-i18n="summary">Summary</span></button>
+          <button class="tab" data-tab="flashcards" role="tab"><span data-i18n="flashcards">Flashcards</span></button>
+          <button class="tab" data-tab="quiz" role="tab"><span data-i18n="quiz">Quiz</span></button>
         </nav>
       </div>
 
