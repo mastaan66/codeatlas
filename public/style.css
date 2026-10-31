@@ -201,6 +201,58 @@ main { flex: 1; display: flex; min-height: 0; }
 #nodeDetails .kv div { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 #nodeDetails .kv b { color: var(--accent); }
 
+/* ---- study kit: index cards + pop quiz ---- */
+.studyKit { margin-top: 12px; font-size: 14px; }
+.studyHead { font: 700 17px var(--hand); color: var(--accent); margin: 16px 0 10px; }
+.flashcards { display: flex; flex-direction: column; gap: 12px; }
+.flashcard { perspective: 900px; cursor: pointer; height: 118px; }
+.flashcard:nth-child(odd) { transform: rotate(-.8deg); }
+.flashcard:nth-child(even) { transform: rotate(.7deg); }
+.flashcard:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.flashInner {
+  position: relative; width: 100%; height: 100%;
+  transform-style: preserve-3d; transition: transform .5s;
+}
+.flashcard.flipped .flashInner { transform: rotateX(180deg); }
+.flashFace {
+  position: absolute; inset: 0; backface-visibility: hidden;
+  border: 1.5px solid var(--border); border-radius: 4px; box-shadow: var(--shadow);
+  padding: 14px 14px 10px; overflow-y: auto;
+  /* index card: ruled lines + a margin rule up top */
+  background:
+    linear-gradient(var(--accent) 0, var(--accent) 100%) no-repeat 0 30px / 100% 1.5px,
+    repeating-linear-gradient(transparent 0 25px, var(--grid-line) 25px 26px),
+    var(--panel);
+}
+.flashFront { font: 400 15px/1.65 var(--hand); color: var(--text); display: flex; gap: 9px; }
+.flashBack { transform: rotateX(180deg); font-size: 13.5px; line-height: 1.6; }
+.cardNo {
+  font: 700 13px var(--hand); color: var(--accent); flex: none;
+  border: 1.5px solid var(--accent); border-radius: 999px;
+  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+}
+.quizQ { margin: 12px 0 16px; }
+.quizQuestion { font-weight: 600; margin-bottom: 7px; }
+.quizOpt {
+  display: block; width: 100%; text-align: left; margin: 5px 0; padding: 7px 11px;
+  background: var(--panel); color: var(--text); border: 1.5px solid var(--border);
+  font-weight: 400; font-size: 13.5px;
+}
+.quizOpt:hover { background: var(--panel); color: var(--accent); border-color: var(--accent); }
+.quizOpt:disabled { cursor: default; opacity: 1; }
+.quizOpt.correct {
+  /* highlighter sweep: marker ink over notebook ink */
+  color: #14213d; font-weight: 600; border-color: transparent;
+  background: linear-gradient(100deg, transparent 0 1%, var(--marker) 2% 98%, transparent 99%)
+    no-repeat 0 50% / 100% 100%;
+  animation: markerSweep .45s ease-out;
+}
+@keyframes markerSweep { from { background-size: 0 100%; } to { background-size: 100% 100%; } }
+.quizOpt.wrong { color: var(--muted); text-decoration: line-through; opacity: .75; }
+.quizOpt.dim { opacity: .55; }
+.quizExplain { font: 400 14px/1.55 var(--hand); color: var(--accent); margin-top: 5px; }
+.quizScore { font: 700 17px var(--hand); color: var(--accent); margin-top: 10px; }
+
 /* ---- graph marks ---- */
 .link { stroke: var(--link); stroke-opacity: .65; }
 .node circle { stroke-width: 1.6px; transition: opacity .15s; }
@@ -242,6 +294,9 @@ main { flex: 1; display: flex; min-height: 0; }
 @media (prefers-reduced-motion: reduce) {
   #legend, #helpCard, .tagline { transform: none; }
   .node circle { transition: none; }
+  .flashcard:nth-child(odd), .flashcard:nth-child(even) { transform: none; }
+  .flashInner { transition: none; }
+  .quizOpt.correct { animation: none; }
 }
 @media (max-width: 760px) {
   main { flex-direction: column; }

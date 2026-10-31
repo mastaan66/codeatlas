@@ -131,6 +131,27 @@ test('GET /api/file rejects traversal and absolute paths', async () => {
   assert.strictEqual(abs.status, 400);
 });
 
+test('GET /api/studykit with a malformed slug is a clean 4xx, not a crash', async () => {
+  const res = await request('GET', '/api/studykit/bad..slug');
+  assert.ok(
+    res.status >= 400 && res.status < 500,
+    `expected 4xx, got ${res.status}`,
+  );
+  assert.ok(res.json && res.json.error, `error body expected, got: ${res.body}`);
+  // Server must still be alive and serving afterwards.
+  const health = await request('GET', '/api/health');
+  assert.strictEqual(health.status, 200);
+});
+
+test('GET /api/studykit/memolite with providers down is a graceful 5xx JSON', async () => {
+  // refresh=1 bypasses any cached kit; both LLM providers are unreachable here.
+  const res = await request('GET', '/api/studykit/memolite?refresh=1');
+  assert.ok(res.status >= 500, `expected 5xx, got ${res.status}`);
+  assert.ok(res.json && typeof res.json.error === 'string', `error JSON expected, got: ${res.body}`);
+  const health = await request('GET', '/api/health');
+  assert.strictEqual(health.status, 200);
+});
+
 test('GET /api/file for a file absent locally is a clean 404', async () => {
   // In CI data/repos is empty (gitignored), so the seeded repo has no sources on disk.
   const res = await request('GET', '/api/file/memolite?path=definitely/not/here.py');

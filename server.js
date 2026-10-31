@@ -17,6 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const DATA_DIR = path.join(__dirname, 'data');
 fs.mkdirSync(path.join(DATA_DIR, 'repos'), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'tours'), { recursive: true });
+fs.mkdirSync(path.join(DATA_DIR, 'studykits'), { recursive: true });
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, provider: process.env.GEMINI_API_KEY ? 'gemini-api' : 'ollama-local' });
@@ -116,6 +117,95 @@ ${context}`;
     const tour = { slug, tour: text, provider, generatedAt: new Date().toISOString() };
     fs.writeFileSync(cacheFile, JSON.stringify(tour));
     res.json(tour);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// --- Study kit: JSON hardening for model output -----------------------------
+
+// Models love to wrap JSON in ``` fences; strip them and cut to the outer object.
+function stripFences(text) {
+  let t = String(text || '').trim();
+  t = t.replace(/^```[a-zA-Z]*\s*/m, '').replace(/```\s*$/m, '').trim();
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start !== -1 && end > start) t = t.slice(start, end + 1);
+  return t;
+}
+
+// Parse + shape-check Gemma's study kit; null means "retry with a fix-it nudge".
+function validateStudyKit(raw) {
+  let obj;
+  try { obj = JSON.parse(stripFences(raw)); } catch { return null; }
+  if (!obj || typeof obj !== 'object') return null;
+  const flashcards = (Array.isArray(obj.flashcards) ? obj.flashcards : [])
+    .filter((c) => c && typeof c.front === 'string' && typeof c.back === 'string')
+    .map((c) => ({ front: c.front.trim(), back: c.back.trim() }))
+    .filter((c) => c.front && c.back)
+    .slice(0, 8);
+  const quiz = (Array.isArray(obj.quiz) ? obj.quiz : [])
+    .filter((q) => q && typeof q.question === 'string'
+      && Array.isArray(q.options) && q.options.length === 4
+      && q.options.every((o) => typeof o === 'string')
+      && Number.isInteger(q.answerIndex) && q.answerIndex >= 0 && q.answerIndex <= 3)
+    .map((q) => ({
+      question: q.question.trim(),
+      options: q.options.map((o) => o.trim()),
+      answerIndex: q.answerIndex,
+      explanation: typeof q.explanation === 'string' ? q.explanation.trim() : '',
+    }))
+    .slice(0, 3);
+  if (flashcards.length < 4 || quiz.length < 3) return null;
+  return { flashcards, quiz };
+}
+
+// Generate (and cache) a flashcard + quiz study kit built from the knowledge graph.
+app.get('/api/studykit/:slug', async (req, res) => {
+  try {
+    const slug = repoSlug(req.params.slug);
+    const cacheFile = path.join(DATA_DIR, 'studykits', `${slug}.json`);
+    if (fs.existsSync(cacheFile) && !req.query.refresh) {
+      return res.json(JSON.parse(fs.readFileSync(cacheFile, 'utf8')));
+    }
+    let graph;
+    try {
+      graph = loadGraph(DATA_DIR, slug);
+    } catch {
+      return res.status(404).json({ error: 'graph not found' });
+    }
+    const context = buildTourContext(graph);
+    const prompt = `You are CodeAtlas. Create a study kit that helps a new contributor memorize the structure of the repo "${slug}", based ONLY on the knowledge-graph digest below. Every card and question must be about the codebase's structure (e.g. "What is the most connected symbol?", "Which module owns X?", "Where would a new adapter live?") and must quote ONLY real symbol and file names that appear in the digest — never invent any.
+
+Respond with ONLY a single valid JSON object, no markdown fences, no commentary, exactly this shape:
+{
+  "flashcards": [{"front": "question about the codebase", "back": "the answer"}],
+  "quiz": [{"question": "...", "options": ["A", "B", "C", "D"], "answerIndex": 0, "explanation": "why this answer is correct"}]
+}
+
+Rules:
+- 6 to 8 flashcards, exactly 3 quiz questions. Keep every string concise.
+- Every quiz item has exactly 4 options and answerIndex is the 0-based index of the correct option.
+- Output raw JSON only. Do not wrap it in \`\`\` fences. Reply with the final answer only, no preamble, no reasoning.
+
+## Knowledge graph digest
+${context}`;
+    let kit = null;
+    let provider = null;
+    // Defensive parse: one retry with an explicit fix-it nudge (SnapStudy-style).
+    for (let attempt = 1; attempt <= 2 && !kit; attempt++) {
+      const out = await askGemma(attempt === 1 ? prompt
+        : prompt + '\n\nIMPORTANT: Your previous reply was not valid JSON of the required shape. Reply again with ONLY the raw JSON object.');
+      provider = out.provider;
+      kit = validateStudyKit(out.text);
+    }
+    if (!kit) throw new Error('Gemma did not return a valid study kit after a retry');
+    const payload = {
+      slug, flashcards: kit.flashcards, quiz: kit.quiz,
+      provider, generatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(cacheFile, JSON.stringify(payload));
+    res.json(payload);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

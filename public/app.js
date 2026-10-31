@@ -37,6 +37,7 @@ async function init() {
   $('#repoSelect').addEventListener('change', (e) => e.target.value && loadRepo(e.target.value));
   $('#askBtn').addEventListener('click', onAsk);
   $('#tourBtn').addEventListener('click', onTour);
+  $('#studyBtn').addEventListener('click', onStudy);
   $('#search').addEventListener('input', onSearch);
   $('#helpBtn').addEventListener('click', () => $('#helpCard').classList.toggle('hidden'));
   $('#zoomIn').addEventListener('click', () => zoomBy(1.35));
@@ -132,6 +133,7 @@ async function loadRepo(slug) {
   currentSlug = slug;
   $('#tour').textContent = '';
   $('#answer').textContent = '';
+  $('#study').textContent = '';
   setStatus('Loading graph…');
   fullGraph = await fetchJSON('/api/graph/' + encodeURIComponent(slug));
   setStatus(null);
@@ -454,6 +456,82 @@ async function onTour() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/* ---- Study tab: flashcards + pop quiz from the knowledge graph ---- */
+async function onStudy() {
+  if (!currentSlug) return alert('Index or select a repo first');
+  const btn = $('#studyBtn');
+  btn.disabled = true;
+  $('#study').textContent = 'Writing flashcards from the knowledge graph…';
+  try {
+    const kit = await fetchJSON('/api/studykit/' + encodeURIComponent(currentSlug));
+    renderStudyKit($('#study'), kit);
+  } catch (err) {
+    $('#study').textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// All model text goes through esc() — never innerHTML raw output.
+function renderStudyKit(el, kit) {
+  const cards = (kit.flashcards || []).map((c, i) => `
+    <div class="flashcard" tabindex="0" role="button" aria-pressed="false" title="Flip the card">
+      <div class="flashInner">
+        <div class="flashFace flashFront"><span class="cardNo">${i + 1}</span><span>${esc(c.front)}</span></div>
+        <div class="flashFace flashBack">${esc(c.back)}</div>
+      </div>
+    </div>`).join('');
+  const quiz = (kit.quiz || []).map((q, qi) => `
+    <div class="quizQ" data-answer="${Number(q.answerIndex)}">
+      <div class="quizQuestion">${qi + 1}. ${esc(q.question)}</div>
+      ${q.options.map((o, oi) => `<button class="quizOpt" data-o="${oi}">${esc(o)}</button>`).join('')}
+      <div class="quizExplain hidden">${esc(q.explanation || '')}</div>
+    </div>`).join('');
+  el.innerHTML = `
+    <h4 class="studyHead">Flashcards</h4>
+    <div class="flashcards">${cards}</div>
+    <h4 class="studyHead">Pop quiz</h4>
+    ${quiz}
+    <div class="quizScore"></div>
+    ${kit.provider ? `<p class="muted">— ${esc(kit.provider)}</p>` : ''}`;
+
+  el.querySelectorAll('.flashcard').forEach((card) => {
+    const flip = () => {
+      card.classList.toggle('flipped');
+      card.setAttribute('aria-pressed', card.classList.contains('flipped'));
+    };
+    card.addEventListener('click', flip);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+    });
+  });
+
+  const questions = el.querySelectorAll('.quizQ');
+  let answered = 0, right = 0;
+  questions.forEach((qEl) => {
+    const answer = Number(qEl.dataset.answer);
+    qEl.querySelectorAll('.quizOpt').forEach((opt) => opt.addEventListener('click', () => {
+      if (qEl.classList.contains('done')) return;
+      qEl.classList.add('done');
+      const picked = Number(opt.dataset.o);
+      qEl.querySelectorAll('.quizOpt').forEach((o) => {
+        const oi = Number(o.dataset.o);
+        o.disabled = true;
+        if (oi === answer) o.classList.add('correct');
+        else if (oi === picked) o.classList.add('wrong');
+        else o.classList.add('dim');
+      });
+      qEl.querySelector('.quizExplain').classList.remove('hidden');
+      answered += 1;
+      if (picked === answer) right += 1;
+      if (answered === questions.length) {
+        el.querySelector('.quizScore').textContent =
+          `Score: ${right} / ${questions.length}` + (right === questions.length ? ' — you know this map!' : '');
+      }
+    }));
+  });
 }
 
 // Model output is markdown — render it, sanitized (belt-and-braces).

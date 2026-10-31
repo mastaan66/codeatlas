@@ -62,6 +62,7 @@
       <button class="tab active" data-tab="node">Symbol</button>
       <button class="tab" data-tab="ask">Ask</button>
       <button class="tab" data-tab="tour">Tour</button>
+      <button class="tab" data-tab="study">Study</button>
     </nav>
     <div id="tab-node" class="tabPanel active">
       <p class="muted">Click a node to inspect it. Node size = connectivity; color = module (community) detected by Graphify.</p>
@@ -75,6 +76,11 @@
     <div id="tab-tour" class="tabPanel">
       <button id="tourBtn">Generate onboarding tour</button>
       <div id="tour" class="prose"></div>
+    </div>
+    <div id="tab-study" class="tabPanel">
+      <p class="muted">Onboarding a codebase is studying it — drill the map with flashcards and a pop quiz written from the knowledge graph.</p>
+      <button id="studyBtn">Make flashcards from this repo</button>
+      <div id="study" class="studyKit"></div>
     </div>
   </aside>
 </main>
