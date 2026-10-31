@@ -1,0 +1,270 @@
+// lib/gemma.js — Gemma 4 AI layer with automatic provider fallback.
+// Provider 1: Gemini API (hosted Gemma 4) when GEMINI_API_KEY is set.
+// Provider 2: local Ollama (gemma4:latest, open weights) as fallback / offline mode.
+
+const GEMINI_BASE =
+  process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/models';
+const DEFAULT_MODEL = process.env.GEMMA_MODEL || 'gemma-4-26b-a4b-it';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:latest';
+
+const LANG_NAMES = { en: 'English', te: 'Telugu (తెలుగు)' };
+
+function buildPrompt(language) {
+  const lang = LANG_NAMES[language] || LANG_NAMES.en;
+  return `You are SnapStudy, an expert study assistant. The attached image contains study material (handwritten notes, a whiteboard, or a textbook page).
+
+Read ALL the text and concepts in the image, then produce study material ENTIRELY in ${lang}.
+
+Respond with ONLY a single valid JSON object, no markdown fences, no commentary, exactly this shape:
+{
+  "summary": "a clean, well-organized summary of the material (3-8 sentences, may use short bullet-like sentences)",
+  "flashcards": [{"front": "question or term", "back": "answer or definition"}],
+  "quiz": [{"question": "...", "options": ["A", "B", "C", "D"], "answerIndex": 0, "explanation": "why this answer is correct"}]
+}
+
+Rules:
+- 4 to 6 flashcards, exactly 3 quiz questions. Keep every string concise.
+- Every quiz item has exactly 4 options and answerIndex is the 0-based index of the correct option.
+- All strings (summary, fronts, backs, questions, options, explanations) must be in ${lang}.
+- Output raw JSON only. Do not wrap it in \`\`\` fences.
+- Reply with the final answer only, no preamble, no reasoning.`;
+}
+
+function buildTextOnlyPrompt(language, note) {
+  const lang = LANG_NAMES[language] || LANG_NAMES.en;
+  return `You are SnapStudy, an expert study assistant. Image understanding is unavailable right now, so instead create GENERAL study material about the topic hinted by the file name "${note}" — or, if that is not informative, about effective study techniques — ENTIRELY in ${lang}.
+
+Respond with ONLY a single valid JSON object, no markdown fences:
+{
+  "summary": "...",
+  "flashcards": [{"front": "...", "back": "..."}],
+  "quiz": [{"question": "...", "options": ["A","B","C","D"], "answerIndex": 0, "explanation": "..."}]
+}
+4-6 flashcards, exactly 3 quiz questions, exactly 4 options each, all text in ${lang}. Raw JSON only. Reply with the final answer only, no preamble, no reasoning.`;
+}
+
+// --- JSON hardening -------------------------------------------------------
+
+function stripFences(text) {
+  let t = String(text || '').trim();
+  // strip ```json ... ``` or ``` ... ```
+  t = t.replace(/^```[a-zA-Z]*\s*/m, '').replace(/```\s*$/m, '').trim();
+  // cut to the outermost JSON object
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start !== -1 && end > start) t = t.slice(start, end + 1);
+  return t;
+}
+
+function tryParse(text) {
+  try {
+    return JSON.parse(stripFences(text));
+  } catch (_) {
+    return null;
+  }
+}
+
+function validateStudy(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const summary = typeof obj.summary === 'string' ? obj.summary.trim() : '';
+  const flashcards = Array.isArray(obj.flashcards)
+    ? obj.flashcards
+        .filter((c) => c && typeof c.front === 'string' && typeof c.back === 'string')
+        .map((c) => ({ front: c.front.trim(), back: c.back.trim() }))
+    : [];
+  const quiz = Array.isArray(obj.quiz)
+    ? obj.quiz
+        .filter(
+          (q) =>
+            q &&
+            typeof q.question === 'string' &&
+            Array.isArray(q.options) &&
+            q.options.length >= 2 &&
+            Number.isInteger(q.answerIndex)
+        )
+        .map((q) => {
+          const options = q.options.slice(0, 4).map(String);
+          while (options.length < 4) options.push('—');
+          const answerIndex = Math.min(Math.max(q.answerIndex, 0), options.length - 1);
+          return {
+            question: q.question.trim(),
+            options,
+            answerIndex,
+            explanation: typeof q.explanation === 'string' ? q.explanation.trim() : '',
+          };
+        })
+    : [];
+  if (!summary && flashcards.length === 0 && quiz.length === 0) return null;
+  return { summary, flashcards, quiz };
+}
+
+// --- Providers ------------------------------------------------------------
+
+async function callGemini(prompt, imageBase64, mimeType) {
+  const model = DEFAULT_MODEL;
+  const url = `${GEMINI_BASE}/${model}:generateContent`;
+  const parts = [];
+  if (imageBase64) parts.push({ inline_data: { mime_type: mimeType, data: imageBase64 } });
+  parts.push({ text: prompt });
+
+  let res;
+  for (let tries = 0; ; tries++) {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+      }),
+      signal: AbortSignal.timeout(120000),
+    });
+    // The free tier throws occasional transient 429/5xx — retry patiently
+    // (with backoff) before giving up, since the local fallback is guarded.
+    if ((res.status === 429 || res.status >= 500) && tries < 2) {
+      await new Promise((r) => setTimeout(r, 1500 * (tries + 1)));
+      continue;
+    }
+    break;
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gemini API ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  const text =
+    data?.candidates?.[0]?.content?.parts
+      ?.filter((p) => !p.thought) // skip model "thinking" parts
+      .map((p) => p.text || '')
+      .join('') || '';
+  if (!text) throw new Error('Gemini API returned no text');
+  return text;
+}
+
+async function callOllama(prompt, imageBase64) {
+  const body = {
+    model: OLLAMA_MODEL,
+    prompt,
+    stream: false,
+    keep_alive: '30m', // keep the model warm between requests / retries
+    options: { temperature: 0.3, num_predict: 1800 },
+  };
+  if (imageBase64) body.images = [imageBase64];
+
+  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(600000), // local inference can take minutes
+  });
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '');
+    throw new Error(`Ollama ${res.status}: ${bodyText.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (!data.response) throw new Error('Ollama returned no response text');
+  return data.response;
+}
+
+// Should a Gemini failure fall back to local Ollama?
+// OLLAMA_FALLBACK=on|off overrides. Default: Ollama is used only when there is
+// no GEMINI_API_KEY (pure-offline mode). With a key configured, pulling a
+// ~10 GB local model into RAM mid-request can OOM-kill the server on small
+// machines — a clear "retry" error is safer than a crash.
+function ollamaFallbackEnabled() {
+  const v = String(process.env.OLLAMA_FALLBACK || '').trim().toLowerCase();
+  if (['on', '1', 'true', 'yes'].includes(v)) return true;
+  if (['off', '0', 'false', 'no'].includes(v)) return false;
+  return !process.env.GEMINI_API_KEY;
+}
+
+// --- Public API -----------------------------------------------------------
+
+/**
+ * Generate study material from an image.
+ * @returns {Promise<{summary, flashcards, quiz, provider, notice?}>}
+ */
+async function generateStudy({ imageBase64, mimeType, language = 'en', filename = 'notes' }) {
+  const prompt = buildPrompt(language);
+  const attempts = [];
+  const hasKey = Boolean(process.env.GEMINI_API_KEY);
+  const useOllama = ollamaFallbackEnabled();
+
+  if (hasKey) {
+    attempts.push({
+      provider: 'gemini',
+      label: 'Gemma 4 · Gemini API',
+      run: (p) => callGemini(p, imageBase64, mimeType),
+    });
+  }
+  if (useOllama) {
+    attempts.push({
+      provider: 'ollama',
+      label: 'Gemma 4 · local open weights',
+      run: (p) => callOllama(p, imageBase64),
+    });
+    // Last-resort: local model without the image (if the local model rejects images).
+    attempts.push({
+      provider: 'ollama-text',
+      label: 'Gemma 4 · local open weights',
+      notice:
+        'Image understanding was unavailable; generated from the topic instead. Connect a GEMINI_API_KEY or a vision-capable local model for full image support.',
+      run: () => callOllama(buildTextOnlyPrompt(language, filename)),
+    });
+  }
+  if (attempts.length === 0) {
+    const e = new Error(
+      'No AI provider is configured: GEMINI_API_KEY is not set and OLLAMA_FALLBACK=off.'
+    );
+    e.providerErrors = [e.message];
+    throw e;
+  }
+
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      let raw = await attempt.run(prompt);
+      let parsed = validateStudy(tryParse(raw));
+      if (!parsed) {
+        // Retry once with an explicit fix-it instruction.
+        const retryPrompt =
+          prompt +
+          '\n\nIMPORTANT: Your previous reply was not valid JSON. Reply again with ONLY the raw JSON object.';
+        raw = await attempt.run(retryPrompt);
+        parsed = validateStudy(tryParse(raw));
+      }
+      if (!parsed) throw new Error('Model did not return valid JSON after retry');
+      const result = { ...parsed, provider: attempt.provider, providerLabel: attempt.label };
+      if (attempt.notice) result.notice = attempt.notice;
+      return result;
+    } catch (err) {
+      console.warn(`[gemma] provider ${attempt.provider} failed: ${err.message}`);
+      errors.push(`${attempt.provider}: ${err.message}`);
+    }
+  }
+  const e =
+    hasKey && !useOllama
+      ? new Error(
+          'The hosted Gemma 4 API is temporarily unavailable — please try again in a few seconds. ' +
+            '(Local Ollama fallback is disabled on this machine; set OLLAMA_FALLBACK=on to enable it.)'
+        )
+      : new Error(`All providers failed — ${errors.join(' | ')}`);
+  e.providerErrors = errors;
+  throw e;
+}
+
+async function healthProvider() {
+  if (process.env.GEMINI_API_KEY) return { provider: 'gemini', label: 'Gemma 4 · Gemini API' };
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) return { provider: 'ollama', label: 'Gemma 4 · local open weights' };
+  } catch (_) {}
+  return { provider: 'none', label: 'no provider available' };
+}
+
+module.exports = { generateStudy, healthProvider };

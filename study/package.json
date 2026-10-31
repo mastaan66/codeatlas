@@ -1,0 +1,28 @@
+{
+  "name": "snapstudy",
+  "version": "1.0.0",
+  "description": "Snap your notes, study smarter — Gemma 4 turns a photo of notes into a summary, flashcards and a quiz (English/Telugu).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "keywords": [
+    "gemma",
+    "multimodal",
+    "flashcards",
+    "study",
+    "hackathon"
+  ],
+  "author": "Mastan",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "multer": "^2.5.0"
+  }
+}
