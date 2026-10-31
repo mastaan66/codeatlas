@@ -15,6 +15,20 @@ Joining a codebase is the slowest part of contributing to open source. READMEs g
 3. **Ask** — questions like *"how does authentication reach the database?"* are answered by **Gemma 4**, grounded in a context pack built from the graph (matched symbols + their edges + the repo's hub nodes). The prompt forbids inventing symbols not present in the graph.
 4. **Tour** — one click generates a numbered onboarding tour: entry points → core modules → where to make your first change.
 
+## Screenshots
+
+**Explore** — memolite mapped: 451 symbols, 990 links, 18 auto-detected modules.
+
+![Knowledge graph of memolite](docs/screenshots/graph.png)
+
+**Ask** — Gemma 4 answers from the graph, with file:line citations.
+
+![Ask tab answering a question about the CLI and storage layer](docs/screenshots/ask.png)
+
+**Tour** — one-click numbered onboarding tour generated from the graph.
+
+![Generated onboarding tour for memolite](docs/screenshots/tour.png)
+
 ## Tracks
 
 | Track | How CodeAtlas qualifies |
