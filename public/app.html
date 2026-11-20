@@ -13,13 +13,21 @@
     const t = localStorage.getItem('codeatlas-theme');
     if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
   } catch {}
+  // No saved choice: follow the system theme, live.
+  (function () {
+    const saved = () => { try { return localStorage.getItem('codeatlas-theme'); } catch { return null; } };
+    const mq = window.matchMedia && matchMedia('(prefers-color-scheme: light)');
+    const sync = () => { if (!saved() && mq) document.documentElement.dataset.theme = mq.matches ? 'light' : 'dark'; };
+    sync();
+    if (mq && mq.addEventListener) mq.addEventListener('change', sync);
+  })();
 </script>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body class="app">
 <header class="topbar">
   <button class="icon-btn brand-toggle" id="sidebarToggle" title="Menu" aria-label="Menu">☰</button>
-  <span class="brand"><span class="brand-mark"></span><span class="brand-word">Code<span>Atlas</span></span></span>
+  <h1 class="brand"><span class="brand-mark"></span><span class="brand-word">Code<span>Atlas</span></span></h1>
   <form id="repoForm" class="repo-form" autocomplete="off">
     <div class="repo-input-wrap">
       <span class="prefix" aria-hidden="true">github.com/</span>
@@ -78,6 +86,7 @@
   </section>
 
   <aside class="rail" id="rail" aria-label="Inspector">
+    <div class="splitter" id="railSplit" role="separator" aria-orientation="vertical" aria-label="Resize inspector (drag, or use arrow keys; double-click to reset)" tabindex="0"></div>
     <div class="rail-head">
       <div class="rail-repo">
         <span class="dot" aria-hidden="true"></span>
@@ -170,10 +179,15 @@
   </div>
 </div>
 
-<dialog id="fileDialog" aria-label="Source file">
+<dialog id="fileDialog" aria-labelledby="fileDialogPath">
   <header>
     <span id="fileDialogPath"></span>
-    <button id="fileDialogClose" class="icon-btn" title="Close" aria-label="Close">×</button>
+    <span id="fileDialogMeta" class="fd-meta"></span>
+    <div class="fd-actions">
+      <button id="fileDialogCopy" class="chip-btn" type="button">Copy</button>
+      <button id="fileDialogMax" class="icon-btn" type="button" title="Maximize" aria-label="Maximize window" aria-pressed="false">⤢</button>
+      <button id="fileDialogClose" class="icon-btn" type="button" title="Close (Esc)" aria-label="Close">×</button>
+    </div>
   </header>
   <pre id="fileContent"></pre>
 </dialog>

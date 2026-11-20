@@ -112,7 +112,7 @@ html[data-theme="light"] {
   --text: #14120d;
   --text-2: #48433a;
   --muted: #6a6458;
-  --faint: #7c7567;
+  --faint: #6f685b; /* ≥4.5:1 on both --bg and --surface */
 
   --accent: #e8441a;
   --accent-strong: #cf3810;
@@ -276,7 +276,7 @@ kbd, .kbd {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------------------------------------------------------------- brand */
-.brand { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.brand { display: inline-flex; align-items: center; gap: 8px; flex: none; margin: 0; font-size: inherit; font-weight: inherit; }
 .brand-mark {
   width: 20px; height: 20px;
   border-radius: var(--r-xs);
@@ -344,7 +344,7 @@ body.app {
   user-select: none;
 }
 .repo-form input, .hero-form input {
-  flex: 1; min-width: 0;
+  flex: 1; min-width: 0; align-self: stretch;
   background: none; border: 0; outline: none;
   font-family: var(--mono);
   font-size: 11.5px;
@@ -382,7 +382,7 @@ body.app {
   fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round;
 }
 .search-field input {
-  flex: 1; min-width: 0;
+  flex: 1; min-width: 0; align-self: stretch;
   background: none; border: 0; outline: none;
   font-size: 12px;
   color: var(--text);
@@ -435,7 +435,7 @@ body.app {
 .shell {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 408px;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w, 408px);
   min-height: 0;
 }
 .stage::before {
@@ -583,7 +583,7 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
 .legend-more { color: var(--faint); }
 
 .tooltip {
-  position: absolute; z-index: var(--z-toast);
+  position: absolute; left: 0; top: 0; z-index: var(--z-toast);
   pointer-events: none;
   padding: 5px 8px;
   border: 1px solid var(--line-strong);
@@ -594,7 +594,12 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
   font-size: 11px;
   max-width: 300px;
   line-height: 1.4;
+  /* Position is written as a transform by the rAF loop (lerped toward the
+     cursor); only opacity transitions, so the follow never fights CSS. */
+  transition: opacity var(--t-fast);
+  will-change: transform, opacity;
 }
+.tooltip.hidden { display: block !important; opacity: 0; }
 .tooltip .tt { font-weight: 500; }
 .tooltip .td { color: var(--muted); font-family: var(--mono); font-size: 9.5px; }
 
@@ -626,6 +631,7 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
 
 /* ---------------------------------------------------------------- rail */
 .rail {
+  position: relative;
   display: flex; flex-direction: column;
   min-height: 0;
   border-left: 1px solid var(--line);
@@ -707,11 +713,11 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
   margin-top: 2px;
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 .card2 h4 {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -851,7 +857,10 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
 
 .snippet { min-width: 0; }
 .snippet-box {
-  max-height: 240px;
+  height: 240px;
+  min-height: 80px;
+  max-height: 70vh;
+  resize: vertical;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
@@ -860,8 +869,8 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
 .snippet pre {
   margin: 0;
   padding: 8px 10px;
-  font-size: 9.5px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--text-2);
   white-space: pre;
   tab-size: 2;
@@ -869,11 +878,11 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
 .snippet .ln { color: var(--faint); user-select: none; margin-right: 10px; }
 .snippet .hl { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); display: inline-block; min-width: 100%; }
 .copy-btn {
-  padding: 4px 9px;
+  padding: 5px 11px;
   border: 1px solid var(--line);
   border-radius: var(--r-full);
-  color: var(--muted);
-  font-size: 10px;
+  color: var(--text-2);
+  font-size: 11.5px;
   transition: color var(--t-fast), border-color var(--t-fast);
 }
 .copy-btn:hover { color: var(--text); border-color: var(--line-strong); }
@@ -1253,8 +1262,20 @@ button.crumb:hover { background: var(--raise); color: var(--text); }
 
 /* ---------------------------------------------------------------- file dialog */
 dialog#fileDialog {
-  width: min(880px, 92vw);
-  max-height: 82vh;
+  /* The global "* { margin: 0 }" reset kills the UA's modal centring, which
+     is why this window used to stick to an edge. Centre it explicitly. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(960px, 92vw);
+  height: min(720px, 84vh);
+  min-width: min(420px, 92vw);
+  min-height: 240px;
+  max-width: 98vw;
+  max-height: 96vh;
+  resize: both;
+  display: none;
+  flex-direction: column;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-lg);
@@ -1263,28 +1284,41 @@ dialog#fileDialog {
   box-shadow: var(--shadow-float);
   overflow: hidden;
 }
+dialog#fileDialog[open] { display: flex; }
+dialog#fileDialog.max { width: 98vw; height: 96vh; resize: none; }
+dialog#fileDialog[open] { animation: fd-in .18s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes fd-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 dialog#fileDialog::backdrop { background: var(--overlay); backdrop-filter: blur(3px); }
+dialog#fileDialog .fd-meta { color: var(--faint); white-space: nowrap; }
+dialog#fileDialog .fd-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+dialog#fileDialog #fileDialogPath { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 dialog#fileDialog > header {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px 9px 14px;
   border-bottom: 1px solid var(--line);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-2);
+  flex: none;
 }
-dialog#fileDialog > header .icon-btn { margin-left: auto; width: 26px; height: 26px; }
+dialog#fileDialog > header .icon-btn { width: 28px; height: 28px; }
 #fileContent {
   margin: 0;
   padding: 12px 0;
-  max-height: calc(82vh - 46px);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  font-size: 10.5px;
+  font-size: 13px;
   line-height: 1.65;
   color: var(--text-2);
   tab-size: 2;
 }
 #fileContent .line { display: block; padding: 0 14px 0 0; }
-#fileContent .line.hl { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+/* A range (a whole function) gets a quiet tint and an accent rail so the
+   code stays readable; the first line of the range is marked a bit stronger. */
+#fileContent .line.hl { background: color-mix(in srgb, var(--accent) 7%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+#fileContent .line:not(.hl) + .line.hl, #fileContent .line.hl:first-child { background: var(--accent-soft); }
+#fileContent .line.hl .no { color: var(--accent); }
 #fileContent .no {
   display: inline-block;
   width: 52px;
@@ -1508,8 +1542,43 @@ body.landing { background: var(--bg); }
 .foot a:hover { color: var(--text); }
 
 /* ---------------------------------------------------------------- responsive */
+/* ---------------------------------------------------------------- resizable inspector */
+.splitter {
+  position: absolute; top: 0; bottom: 0; left: -5px; width: 10px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+.splitter::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px;
+  background: transparent;
+  transition: background var(--t-fast);
+}
+.splitter:hover::after, .splitter:focus-visible::after, .splitter.dragging::after { background: var(--accent); }
+.splitter:focus-visible { outline: none; }
+body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+
+/* collapsible sections: click a section title to fold it */
+.rail-body .card2 > h4, .rail-body .kv-block > h4 {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none;
+  border-radius: var(--r-xs);
+}
+.rail-body .card2 > h4::after, .rail-body .kv-block > h4::after {
+  content: "▾"; margin-left: auto; font-size: 11px; color: var(--faint);
+  transition: transform var(--t-fast);
+}
+.rail-body .card2 > h4:hover, .rail-body .kv-block > h4:hover { color: var(--text); }
+.rail-body .card2 > h4:focus-visible, .rail-body .kv-block > h4:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rail-body .collapsed > h4::after { transform: rotate(-90deg); }
+.rail-body .collapsed > :not(h4) { display: none !important; }
+
+.snippet-tools { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+@media (max-width: 900px) { .splitter { display: none; } }
+
 @media (max-width: 1180px) {
-  .shell { grid-template-columns: minmax(0, 1fr) 368px; }
+  .shell { grid-template-columns: minmax(0, 1fr) var(--rail-w, 368px); }
   .stats-bar { max-width: calc(100% - 430px); }
 }
 @media (max-width: 1024px) {
@@ -1559,6 +1628,7 @@ body.landing { background: var(--bg); }
 @media (pointer: coarse) {
   .icon-btn, .tools button, .dh-close, .sidebar .close { min-width: 40px; min-height: 40px; }
   .chip-btn { min-height: 40px; }
+  .repo-input-wrap, .search-field, .repo-select { height: 40px; }
   .tab { padding-block: 13px; }
   .search-result { padding: 11px 9px; }
   .item { padding: 10px 7px; }
