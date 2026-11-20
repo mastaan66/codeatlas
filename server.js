@@ -1,40 +1,178 @@
-// CodeAtlas — explore any codebase as an interactive knowledge graph.
-// Express server: indexes GitHub repos via Graphify, serves the graph,
-// and answers questions / generates onboarding tours with Gemma 4.
+// CodeAtlas — explore any codebase as a navigable map.
+// Express server: bounded GitHub indexing with live progress, atlas payloads
+// (bounded per zoom level), and Gemma-grounded ask/tour/study.
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 
-const { indexRepo, listRepos, loadGraph, repoSlug } = require('./lib/indexer');
+const { indexRepo, listRepos, loadGraph, repoSlug, readMeta } = require('./lib/indexer');
 const { buildQuestionContext, buildTourContext } = require('./lib/graphContext');
 const { askGemma } = require('./lib/gemma');
+const atlas = require('./lib/atlas');
+const intel = require('./lib/graphIntel');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+const PUBLIC_DIR = path.join(__dirname, 'public');
+app.use(express.static(PUBLIC_DIR, { index: false }));
 
 const DATA_DIR = path.join(__dirname, 'data');
 fs.mkdirSync(path.join(DATA_DIR, 'repos'), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'tours'), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'studykits'), { recursive: true });
+fs.mkdirSync(path.join(DATA_DIR, 'briefs'), { recursive: true });
+
+const GITHUB_URL_RE = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/;
+
+/* ------------------------------------------------------------------- pages */
+
+app.get('/', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
+app.get(['/app', '/atlas'], (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'app.html')));
+
+/* -------------------------------------------------------------------- jobs */
+
+const JOB_TTL_MS = 60 * 60 * 1000;
+const MAX_CONCURRENT = Number(process.env.INDEX_CONCURRENCY || 2);
+const jobs = new Map();
+const byRepo = new Map();
+const queue = [];
+let running = 0;
+
+const indexHits = new Map(); // ip -> timestamps
+const INDEX_LIMIT = Number(process.env.INDEX_RATE_LIMIT || 8); // per 10 min per IP
+
+function publicJob(job) {
+  return {
+    id: job.id,
+    slug: job.slug,
+    repoUrl: job.repoUrl,
+    state: job.state,
+    stage: job.stage,
+    progress: job.progress,
+    message: job.message,
+    stats: job.stats || null,
+    meta: job.meta || null,
+    error: job.error || null,
+    cached: !!job.cached,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    queuePosition: job.state === 'queued' ? Math.max(1, queue.indexOf(job) + 1) : 0,
+    elapsedMs: Date.now() - job.startedAt,
+  };
+}
+
+function broadcast(job) {
+  const data = `data: ${JSON.stringify(publicJob(job))}\n\n`;
+  for (const res of job.listeners) {
+    try { res.write(data); } catch { job.listeners.delete(res); }
+  }
+}
+
+function setState(job, patch) {
+  Object.assign(job, patch);
+  broadcast(job);
+}
+
+function schedule(job) {
+  queue.push(job);
+  setState(job, { state: 'queued', message: 'Waiting for an indexing slot…' });
+  pump();
+}
+
+function pump() {
+  while (running < MAX_CONCURRENT && queue.length) {
+    const job = queue.shift();
+    running += 1;
+    runJob(job).finally(() => {
+      running -= 1;
+      pump();
+    });
+  }
+  // Refresh queue positions.
+  queue.forEach((j) => broadcast(j));
+}
+
+async function runJob(job) {
+  setState(job, { state: 'running', stage: 'clone', progress: 1, message: 'Starting…', startedAt: Date.now() });
+  try {
+    const result = await indexRepo(DATA_DIR, job.repoUrl, {
+      force: job.force,
+      onProgress: (p) => {
+        setState(job, {
+          stage: p.stage,
+          progress: Math.max(1, Math.min(100, p.progress || 1)),
+          message: p.message || '',
+          ...(p.stats ? { stats: p.stats } : {}),
+          ...(p.meta ? { meta: p.meta } : {}),
+        });
+      },
+    });
+    atlas.invalidate(result.slug);
+    setState(job, {
+      state: 'ready',
+      stage: 'ready',
+      progress: 100,
+      message: `Map ready — ${result.stats.nodes} symbols, ${result.stats.links} links`,
+      stats: result.stats,
+      meta: result.meta || null,
+      cached: !!result.cached,
+      finishedAt: Date.now(),
+    });
+  } catch (err) {
+    setState(job, {
+      state: 'failed',
+      stage: 'failed',
+      message: 'Indexing failed',
+      error: err.message,
+      finishedAt: Date.now(),
+    });
+  } finally {
+    busyRepos.delete(job.repoUrl);
+    setTimeout(() => closeJob(job), JOB_TTL_MS).unref?.();
+  }
+}
+
+const busyRepos = new Map(); // repoUrl -> job
+
+function closeJob(job) {
+  for (const res of job.listeners) {
+    try { res.end(); } catch {}
+  }
+  job.listeners.clear();
+  jobs.delete(job.id);
+  if (byRepo.get(job.repoUrl) === job) byRepo.delete(job.repoUrl);
+}
+
+/* --------------------------------------------------------------------- API */
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, provider: process.env.GEMINI_API_KEY ? 'gemini-api' : 'ollama-local' });
+  res.json({
+    ok: true,
+    provider: process.env.GEMINI_API_KEY ? 'gemini-api' : 'ollama-local',
+    version: require('./package.json').version,
+    limits: {
+      maxFiles: Number(process.env.MAX_INDEX_FILES || 1200),
+      maxNodes: Number(process.env.MAX_NODES_SERVED || 8000),
+      concurrency: MAX_CONCURRENT,
+    },
+  });
 });
 
 app.get('/api/repos', (req, res) => {
-  res.json({ repos: listRepos(DATA_DIR) });
+  const repos = listRepos(DATA_DIR);
+  const details = repos.map((slug) => {
+    const meta = readMeta(DATA_DIR, slug) || null;
+    let stats = null;
+    try { stats = atlas.getAtlas(DATA_DIR, slug).stats; } catch {}
+    return { slug, meta, stats };
+  });
+  res.json({ repos, details });
 });
 
-// Index a public GitHub repo: shallow clone + graphify extract (local AST parsing).
-// Hardened: naive per-IP rate limit and a per-URL in-flight lock, so concurrent
-// requests can't race the clone or use the endpoint as a disk-filling vector.
-const indexHits = new Map(); // ip -> timestamps
-const inFlight = new Map(); // repoUrl -> promise
-const INDEX_LIMIT = Number(process.env.INDEX_RATE_LIMIT || 5); // per 10 min per IP
-
-app.post('/api/index', async (req, res) => {
+app.post('/api/index', (req, res) => {
   try {
     const now = Date.now();
     const hits = (indexHits.get(req.ip) || []).filter((t) => now - t < 600000);
@@ -44,29 +182,293 @@ app.post('/api/index', async (req, res) => {
     hits.push(now);
     indexHits.set(req.ip, hits);
 
-    const { repoUrl } = req.body || {};
-    const key = String(repoUrl || '').trim();
-    let job = inFlight.get(key);
-    if (!job) {
-      job = indexRepo(DATA_DIR, key).finally(() => inFlight.delete(key));
-      inFlight.set(key, job);
+    const repoUrl = String((req.body || {}).repoUrl || '').trim();
+    const m = GITHUB_URL_RE.exec(repoUrl);
+    if (!m) {
+      return res.status(400).json({ error: 'expected a public GitHub URL like https://github.com/owner/repo' });
     }
-    res.json(await job);
+    const slug = repoSlug(`${m[1]}-${m[2]}`);
+
+    const existing = busyRepos.get(repoUrl);
+    if (existing && (existing.state === 'queued' || existing.state === 'running')) {
+      return res.json({ jobId: existing.id, slug, reused: true });
+    }
+
+    const job = {
+      id: crypto.randomUUID(),
+      slug,
+      repoUrl,
+      force: !!(req.body || {}).refresh,
+      state: 'queued',
+      stage: 'queued',
+      progress: 0,
+      message: 'Queued',
+      listeners: new Set(),
+      startedAt: Date.now(),
+    };
+    jobs.set(job.id, job);
+    byRepo.set(repoUrl, job);
+    busyRepos.set(repoUrl, job);
+    schedule(job);
+    res.status(202).json({ jobId: job.id, slug });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
+app.get('/api/job/:id', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'job not found (it may have expired)' });
+  res.json(publicJob(job));
+});
+
+app.get('/api/job/:id/events', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'job not found (it may have expired)' });
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write('retry: 2000\n\n');
+  res.write(`data: ${JSON.stringify(publicJob(job))}\n\n`);
+  if (job.state === 'ready' || job.state === 'failed') return res.end();
+  job.listeners.add(res);
+  const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 15000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    job.listeners.delete(res);
+  });
+});
+
+/* ------------------------------------------------------------------- atlas */
+
+function graphOr404(fn, req, res) {
+  try {
+    res.json(fn());
+  } catch (err) {
+    res.status(err.statusCode || 404).json({ error: err.message });
+  }
+}
+
+app.get('/api/atlas/:slug', (req, res) => {
+  graphOr404(() => {
+    const slug = repoSlug(req.params.slug);
+    return atlas.overview(DATA_DIR, slug, { includeMeta: req.query.meta === '1' });
+  }, req, res);
+});
+
+app.get('/api/atlas/:slug/module', (req, res) => {
+  graphOr404(() => {
+    const slug = repoSlug(req.params.slug);
+    const id = String(req.query.id || '');
+    if (id.length > 500) { const e = new Error('module id too long'); e.statusCode = 400; throw e; }
+    return atlas.modulePayload(DATA_DIR, slug, id);
+  }, req, res);
+});
+
+app.get('/api/atlas/:slug/node', (req, res) => {
+  graphOr404(() => {
+    const slug = repoSlug(req.params.slug);
+    const id = String(req.query.id || '');
+    if (!id || id.length > 500) { const e = new Error('symbol id required'); e.statusCode = 400; throw e; }
+    return atlas.nodePayload(DATA_DIR, slug, id);
+  }, req, res);
+});
+
+app.get('/api/atlas/:slug/search', (req, res) => {
+  graphOr404(() => {
+    const slug = repoSlug(req.params.slug);
+    return { results: atlas.search(DATA_DIR, slug, req.query.q, 24) };
+  }, req, res);
+});
+
+app.get('/api/meta/:slug', (req, res) => {
+  graphOr404(() => {
+    const slug = repoSlug(req.params.slug);
+    const a = atlas.getAtlas(DATA_DIR, slug);
+    return {
+      slug, stats: a.stats, meta: a.meta, languages: a.languages,
+      modules: a.moduleList.length,
+    };
+  }, req, res);
+});
+
+
+/* -------------------------------------------------- intelligence endpoints */
+
+// LLM narration is a bonus, never a dependency: race it and keep facts on timeout.
+function askWithTimeout(prompt, ms = Number(process.env.NARRATE_TIMEOUT_MS || 45000)) {
+  return Promise.race([
+    askGemma(prompt),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('narration timed out')), ms).unref?.()),
+  ]);
+}
+
+const BRIEF_PROMPT = (facts) => `You are CodeAtlas, a precise codebase guide. Below are FACTS extracted from a Graphify knowledge graph (real symbols, real files). Write a short onboarding brief for a developer opening this repo for the first time.
+
+Rules:
+- Use ONLY symbols, files and modules that appear in the facts. Never invent names.
+- Answer three questions, in this order: (1) what this codebase appears to be and its main job, (2) its 3-5 real modules and how they relate, (3) the exact reading order to understand it (name files/symbols).
+- 130-190 words. Plain markdown, no headings, no preamble, no bullet-point spam (at most one short list).
+- If the evidence is thin, say so plainly instead of guessing.
+
+FACTS:
+${JSON.stringify(facts).slice(0, 18000)}`;
+
+const MODULE_PROMPT = (facts, snippetBlocks) => `You are CodeAtlas, helping a developer actually read a module. Using ONLY the facts and source excerpts below, explain:
+1. What this module is responsible for (plain language).
+2. How it connects to the rest of the repo (dependencies listed).
+3. A reading order through its files — name the files, say what to look for in each.
+4. One gotcha or thing that is easy to misunderstand.
+120-200 words, concise markdown, no preamble. Never invent a symbol or file.
+
+MODULE FACTS:
+${JSON.stringify(facts).slice(0, 14000)}
+
+SOURCE EXCERPTS:
+${snippetBlocks || '(none available)'}`;
+
+const SYMBOL_PROMPT = (facts, snippetBlock) => `You are CodeAtlas, explaining one symbol inside a real codebase. Using ONLY the facts and source excerpt below:
+1. Say what it does, concretely.
+2. Explain how it is used: who calls it and what it calls (from the lists).
+3. Point at the next one or two places to read.
+90-150 words, concise markdown, no preamble. Never invent symbols or files.
+
+SYMBOL FACTS:
+${JSON.stringify(facts).slice(0, 12000)}
+
+SOURCE:
+${snippetBlock || '(no source available)'}`;
+
+app.get('/api/brief/:slug', async (req, res) => {
+  try {
+    const slug = repoSlug(req.params.slug);
+    const atlasForBrief = atlas.getAtlas(DATA_DIR, slug);
+    const facts = intel.briefFacts(atlasForBrief);
+    const graphMtime = atlas.getAtlas(DATA_DIR, slug).graphMtimeMs;
+    const cacheFile = path.join(DATA_DIR, 'briefs', `${slug}.json`);
+    let cached = null;
+    try { cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch {}
+    if (cached && cached.graphMtime === graphMtime && cached.narrative) {
+      return res.json({ slug, facts, narrative: cached.narrative, provider: cached.provider, generatedAt: cached.generatedAt, cached: true });
+    }
+    if (req.query.narrate === '0') {
+      return res.json({ slug, facts, narrative: null, provider: null });
+    }
+    try {
+      const out = await askWithTimeout(BRIEF_PROMPT(facts));
+      const payload = { slug, narrative: out.text, provider: out.provider, graphMtime, generatedAt: new Date().toISOString() };
+      fs.writeFileSync(cacheFile, JSON.stringify(payload));
+      res.json({ ...payload, facts });
+    } catch (err) {
+      res.json({ slug, facts, narrative: null, provider: null, warning: err.message });
+    }
+  } catch (err) {
+    res.status(err.statusCode || 404).json({ error: err.message });
+  }
+});
+
+app.post('/api/explain', async (req, res) => {
+  try {
+    const { slug, kind, id } = req.body || {};
+    const s = repoSlug(slug);
+    const data = intel.getIntel(DATA_DIR, s);
+    let facts;
+    let prompt;
+    let snippets = [];
+    if (kind === 'module') {
+      facts = intel.moduleFacts(data.atlas, String(id || ''));
+      if (!facts) { const e = new Error('module not found'); e.statusCode = 404; throw e; }
+      for (const f of facts.topFiles.slice(0, 3)) {
+        const sn = intel.snippet(DATA_DIR, s, f.file, null, { maxLines: 32 });
+        if (sn) snippets.push(`## ${f.file} (L${sn.startLine}-L${sn.endLine})\n\`\`\`\n${sn.text}\n\`\`\``);
+      }
+      prompt = MODULE_PROMPT(facts, snippets.join('\n\n'));
+    } else if (kind === 'symbol') {
+      const nodeId = String(id || '');
+      facts = intel.symbolFacts(data.atlas, data, nodeId);
+      if (!facts) { const e = new Error('symbol not found'); e.statusCode = 404; throw e; }
+      const sn = intel.snippet(DATA_DIR, s, facts.file, facts.loc, { maxLines: 55 });
+      prompt = SYMBOL_PROMPT(facts, sn ? `## ${facts.file} (L${sn.startLine}-L${sn.endLine})\n\`\`\`\n${sn.text}\n\`\`\`` : '');
+      if (sn) snippets.push(sn);
+    } else {
+      const e = new Error('kind must be "module" or "symbol"'); e.statusCode = 400; throw e;
+    }
+
+    if (req.body && req.body.narrate === false) {
+      return res.json({ slug: s, kind, facts, narrative: null, provider: null, sources: snippets.map((x) => ({ file: x.file, startLine: x.startLine })) });
+    }
+    try {
+      const out = await askWithTimeout(prompt);
+      res.json({ slug: s, kind, facts, narrative: out.text, provider: out.provider });
+    } catch (err) {
+      res.json({ slug: s, kind, facts, narrative: null, provider: null, warning: err.message });
+    }
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Facts-only symbol endpoint (fast, no model): powers the inspector.
+app.get('/api/symbol/:slug', (req, res) => {
+  try {
+    const s = repoSlug(req.params.slug);
+    const data = intel.getIntel(DATA_DIR, s);
+    const facts = intel.symbolFacts(data.atlas, data, String(req.query.id || ''));
+    if (!facts) return res.status(404).json({ error: 'symbol not found' });
+    const sn = intel.snippet(DATA_DIR, s, facts.file, facts.loc, { maxLines: 40 });
+    res.json({ ...facts, snippet: sn });
+  } catch (err) {
+    res.status(err.statusCode || 404).json({ error: err.message });
+  }
+});
+
+// Deterministic dependency path: "how does A reach B?"
+app.post('/api/path', (req, res) => {
+  try {
+    const s = repoSlug((req.body || {}).slug);
+    const data = intel.getIntel(DATA_DIR, s);
+    const resolve = (q) => {
+      const v = String(q || '').trim();
+      if (!v) return null;
+      if (data.byId.has(v)) return data.byId.get(v);
+      const exact = [...data.byId.values()].filter((n) => n.label.toLowerCase() === v.toLowerCase());
+      if (exact.length) return exact.sort((a, b) => b.degree - a.degree)[0];
+      const hits = intel.anchorNodes(data.atlas, v, 1);
+      return hits[0] || null;
+    };
+    const from = resolve((req.body || {}).from);
+    const to = resolve((req.body || {}).to);
+    if (!from || !to) return res.status(404).json({ error: 'could not resolve both symbols' });
+    const ids = intel.shortestPath(data, from.id, to.id, 8);
+    if (!ids) return res.json({ found: false, from, to, message: 'no path within 8 hops' });
+    const path = ids.map((id) => {
+      const n = data.byId.get(id);
+      return {
+        id: n.id, label: n.label, kind: n.kind, file: n.file, loc: n.loc,
+        module: data.atlas.moduleOf.get(n.id) || null,
+      };
+    });
+    res.json({ found: true, from, to, path });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// Legacy full graph (kept for tests and the agent skill).
 app.get('/api/graph/:slug', (req, res) => {
   try {
     const graph = loadGraph(DATA_DIR, req.params.slug);
     res.json(graph);
-  } catch (err) {
+  } catch {
     res.status(404).json({ error: 'graph not found' });
   }
 });
 
-// Serve one source file from an indexed repo (read-only, bounded, traversal-safe).
+/* -------------------------------------------------------------- file viewer */
+
 const MAX_FILE_BYTES = 200 * 1024;
 app.get('/api/file/:slug', (req, res) => {
   try {
@@ -95,30 +497,50 @@ app.get('/api/file/:slug', (req, res) => {
   }
 });
 
-// Ask a question about an indexed repo; graph context keeps Gemma grounded.
+/* --------------------------------------------------------------------- ask */
+
 app.post('/api/ask', async (req, res) => {
   try {
-    const { slug, question } = req.body || {};
+    const { slug, question, history } = req.body || {};
     if (!question || typeof question !== 'string' || question.length > 2000) {
       return res.status(400).json({ error: 'question required (max 2000 chars)' });
     }
-    const graph = loadGraph(DATA_DIR, slug);
-    const context = buildQuestionContext(graph, question);
-    const prompt = `You are CodeAtlas, a codebase guide. Answer using ONLY the knowledge-graph context below. Cite symbols and files by name. If the context is insufficient, say what is missing — never invent symbols. Reply with the final answer only, as concise markdown prose — no preamble, no restating these instructions, no step-by-step reasoning.
+    const s = repoSlug(slug);
+    const r = intel.retrieve(DATA_DIR, s, question);
 
-## Knowledge graph context for repo "${slug}"
-${context}
+    const turns = Array.isArray(history) ? history.slice(-6)
+      .filter((t) => t && (t.role === 'user' || t.role === 'assistant') && typeof t.content === 'string')
+      .map((t) => `${t.role === 'user' ? 'Developer' : 'CodeAtlas'}: ${t.content.slice(0, 1200)}`).join('\n') : '';
+
+    const prompt = `You are CodeAtlas, a codebase reading companion. Answer using ONLY the grounded context below. Rules:
+- Cite the specific symbol and \`file:line\` for every structural claim.
+- If the context is insufficient, say exactly what is missing. Never invent symbols, files or behaviour.
+- Prefer a direct answer, then the mechanism, then where to read next. Use short markdown.
+- No preamble, no restating these instructions, no hidden reasoning.
+
+## Grounded context for repo "${s}"
+${r.context}
+${turns ? `\n## Recent conversation\n${turns}` : ''}
 
 ## Question
 ${question}`;
+
     const { text, provider } = await askGemma(prompt);
-    res.json({ answer: text, provider });
+
+    // Deterministic follow-ups from the graph, not model guesses.
+    const followups = [];
+    const a = r.anchors[0];
+    if (a) {
+      followups.push(`What calls ${a.label}?`);
+      followups.push(`Explain ${a.file || a.label} in detail`);
+    }
+    if (r.sources.length > 1) followups.push(`How does ${r.sources[0].label} reach ${r.sources[1].label}?`);
+    res.json({ answer: text, provider, sources: r.sources, followups: followups.slice(0, 3) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
-// Generate (and cache) a guided onboarding tour of the repo.
 app.get('/api/tour/:slug', async (req, res) => {
   try {
     const slug = repoSlug(req.params.slug);
@@ -143,7 +565,6 @@ ${context}`;
 
 // --- Study kit: JSON hardening for model output -----------------------------
 
-// Models love to wrap JSON in ``` fences; strip them and cut to the outer object.
 function stripFences(text) {
   let t = String(text || '').trim();
   t = t.replace(/^```[a-zA-Z]*\s*/m, '').replace(/```\s*$/m, '').trim();
@@ -153,7 +574,6 @@ function stripFences(text) {
   return t;
 }
 
-// Parse + shape-check Gemma's study kit; null means "retry with a fix-it nudge".
 function validateStudyKit(raw) {
   let obj;
   try { obj = JSON.parse(stripFences(raw)); } catch { return null; }
@@ -179,7 +599,6 @@ function validateStudyKit(raw) {
   return { flashcards, quiz };
 }
 
-// Generate (and cache) a flashcard + quiz study kit built from the knowledge graph.
 app.get('/api/studykit/:slug', async (req, res) => {
   try {
     const slug = repoSlug(req.params.slug);
@@ -211,7 +630,6 @@ Rules:
 ${context}`;
     let kit = null;
     let provider = null;
-    // Defensive parse: one retry with an explicit fix-it nudge (SnapStudy-style).
     for (let attempt = 1; attempt <= 2 && !kit; attempt++) {
       const out = await askGemma(attempt === 1 ? prompt
         : prompt + '\n\nIMPORTANT: Your previous reply was not valid JSON of the required shape. Reply again with ONLY the raw JSON object.');

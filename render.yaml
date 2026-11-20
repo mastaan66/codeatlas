@@ -1,0 +1,24 @@
+# Render Blueprint — one-click deploy of CodeAtlas from GitHub.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: codeatlas
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      # Set this in the Render dashboard (never commit the key).
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMMA_MODEL
+        value: gemma-4-26b-a4b-it
+      - key: MAX_INDEX_FILES
+        value: 1200
+      - key: INDEX_CONCURRENCY
+        value: 2

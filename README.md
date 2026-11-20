@@ -17,9 +17,9 @@ GitHub repo URL ──▶ graphify extract ──▶ graph.json ──▶ Map   
                     tree-sitter AST,        │       ├─▶ Ask+Tour (Gemma 4 · humans learn)
                     local, no LLM           │       ├─▶ Study  (flashcards+quiz · humans drill)
                                             │       └─▶ repo-tour skill (docs · coding agents)
-photo of notes ──▶ study/ SnapStudy ─ multimodal Gemma 4 ─▶ summary · flashcards · quiz (EN+తెలుగు)
+photo of notes ──▶ study/ (Study surface) ─▶ multimodal Gemma 4 ─▶ summary · flashcards · quiz (EN+తెలుగు)
 
-engine: Gemma 4 — Gemini API (hosted) ⇄ Ollama (open weights, offline) · deployed on Cloudways
+engine: Gemma 4 — Gemini API (hosted) ⇄ Ollama (open weights, offline) · Cloudways-ready
 ```
 
 Built at Hacktoberfest Hack Day Hyderabad × AI Community Hyderabad, 31 Oct 2026.
@@ -28,10 +28,10 @@ Built at Hacktoberfest Hack Day Hyderabad × AI Community Hyderabad, 31 Oct 2026
 
 | Track | Where to look |
 |---|---|
-| **Best Use of Graphify** | The knowledge graph is the product's ground truth: [`lib/indexer.js`](lib/indexer.js) builds it (`graphify extract --code-only`), [`public/app.js`](public/app.js) renders it, [`lib/graphContext.js`](lib/graphContext.js) grounds every Gemma prompt in it, and [`agent-skill/scripts/analyze_graph.py`](agent-skill/scripts/analyze_graph.py) turns it into onboarding docs |
+| **Best Use of Graphify** | The knowledge graph is the product's ground truth: [`lib/scan.js`](lib/scan.js) does a deterministic budgeted file selection (largest-remainder packer over directory sizes), [`lib/indexer.js`](lib/indexer.js) extracts a tree-sitter AST per file, [`lib/atlas.js`](lib/atlas.js) builds module directories + deterministic `forceLayout` over the budgeted nodes, [`lib/graphIntel.js`](lib/graphIntel.js) grounds every surface in it, [`agent-skill/scripts/analyze_graph.py`](agent-skill/scripts/analyze_graph.py) turns it into onboarding docs |
 | **Best Use of Gemma 4** | All reasoning is Gemma 4 — `gemma-4-26b-a4b-it` via the **Gemini API** ([`lib/gemma.js`](lib/gemma.js)); multimodal image→study-kit in [`study/lib/gemma.js`](study/lib/gemma.js), multilinguality demonstrated in English + Telugu |
 | **Best Open-Source AI Project** | MIT-licensed; ships an **installable agent skill** ([`agent-skill/`](agent-skill/)); every surface runs **fully offline on open-weight Gemma 4 via Ollama** when no API key is set |
-| **Best Use of Cloudways** | Built for Cloudways Velocity (Node preset, env-config, bundled seed graphs so the demo works even where the Graphify CLI can't install) — deploy steps and graceful-degradation table in [`DEPLOY.md`](DEPLOY.md); live URL added at demo time |
+| **Best Use of Cloudways** | Built for Cloudways Velocity (Node preset, env-config, bundled seed graphs so the demo works even where the Graphify CLI can't install) — deploy steps and graceful-degradation table in [`DEPLOY.md`](DEPLOY.md); live demo at the booth |
 
 Proof of work: 40 automated tests across three CI jobs (all offline, no API keys), real incremental commit history from event day, demo videos below.
 
@@ -56,7 +56,7 @@ Requires Node ≥ 20 and `git`; live indexing needs the Graphify CLI (`uv tool i
 
 | You say | CodeAtlas answers with | How it solves it |
 |---|---|---|
-| *"Where do I even start?"* | **Map** | a force-directed atlas of the real structure — color = module, size = connectivity; search, Meet-style fly-to-focus, click any symbol through to its source. Config noise (manifests, CI yaml, lockfiles) folds behind a toggle, so modules mean architecture, not plumbing |
+| *"Where do I even start?"* | **Map** | a force-directed atlas of the real structure — color = module, size = connectivity. Modules with hundreds of symbols get a **file-cluster map**: each source file is a small neighborhood bubble packed by weight, so big modules read as covering neighborhoods rather than blobs. Search, Meet-style fly-to-focus, click any symbol through to its source. Config noise (manifests, CI yaml, lockfiles) folds behind a toggle, so modules mean architecture, not plumbing |
 | *"How does the CLI reach the storage layer?"* | **Ask + Tour** | Gemma 4 answers **from the graph** — `file:line` citations, forbidden from inventing symbols, honest when the graph can't say — plus a one-click onboarding tour from entry points to your first change |
 | *"I read it. Will I remember it?"* | **Study** | flashcards and a pop quiz written *from the graph* — onboarding a codebase is studying it. And [`study/`](study/) extends the same idea to paper: photograph handwritten notes or a whiteboard, get the same study kit back, in English or తెలుగు |
 | *"My agent re-reads the repo every task"* | **repo-tour** | an installable agent skill that writes `ONBOARDING.md`, `ARCHITECTURE.md` (mermaid module diagram) and `GOOD-FIRST-SPOTS.md` from the graph once — real committed output at [`agent-skill/examples/memolite/`](agent-skill/examples/memolite/) |

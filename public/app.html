@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CodeAtlas — the map of your codebase</title>
+<meta name="description" content="Paste a GitHub repo. Get a navigable map of its architecture, grounded answers, an onboarding tour and flashcards.">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f1eee5" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script>
+  try {
+    const t = localStorage.getItem('codeatlas-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  } catch {}
+</script>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="app">
+<header class="topbar">
+  <button class="icon-btn brand-toggle" id="sidebarToggle" title="Menu" aria-label="Menu">☰</button>
+  <span class="brand"><span class="brand-mark"></span><span class="brand-word">Code<span>Atlas</span></span></span>
+  <form id="repoForm" class="repo-form" autocomplete="off">
+    <div class="repo-input-wrap">
+      <span class="prefix" aria-hidden="true">github.com/</span>
+      <input id="repoInput" name="repo" type="text" inputmode="url" spellcheck="false" placeholder="owner/repo" aria-label="GitHub repository">
+    </div>
+    <select id="repoSelect" class="repo-select" aria-label="Indexed repositories"><option value="">Indexed repos…</option></select>
+    <button class="chip-btn primary" id="indexBtn" type="submit">Map</button>
+  </form>
+
+  <div class="search-wrap">
+    <div class="search-field">
+      <svg class="search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16.2 16.2 4.3 4.3"/></svg>
+      <input id="search" placeholder="Search symbols, files…" autocomplete="off" spellcheck="false" aria-label="Search">
+      <kbd>/</kbd>
+    </div>
+    <div class="results-wrap">
+      <div id="searchResults" class="search-results hidden" role="listbox"></div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="chip-btn" id="providerBadge" title="Reasoning engine"></span>
+    <button class="icon-btn" id="paletteBtn" title="Command palette (Ctrl/⌘ K)" aria-label="Open command palette">⌗</button>
+    <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle light and dark theme">◐</button>
+    <a class="icon-btn" href="https://github.com/mastaan66/codeatlas" target="_blank" rel="noreferrer" title="GitHub" aria-label="GitHub repository">↗</a>
+  </div>
+</header>
+
+<main class="shell">
+  <section class="stage" id="stage" aria-label="Codebase map">
+    <canvas id="map" role="img" aria-label="Interactive map of the codebase"></canvas>
+
+    <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+
+    <div class="tools" role="group" aria-label="Map controls">
+      <button id="backBtn" title="Back (Esc)" aria-label="Back">←</button>
+      <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+      <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+      <button id="fitBtn" title="Fit to view" aria-label="Fit to view">⛶</button>
+    </div>
+
+    <div class="minimap-box">
+      <canvas id="mini" class="minimap" width="234" height="160" aria-label="Minimap"></canvas>
+      <div class="coverage" id="coverage">
+        <span>coverage</span>
+        <div class="bar"><div class="fill" id="coverageBar"></div></div>
+        <span id="coverageText">0%</span>
+      </div>
+    </div>
+
+    <div class="stats-bar" id="repoStats"></div>
+    <div class="legend" id="legend"></div>
+
+    <div class="tooltip hidden" id="tooltip"></div>
+    <div class="stage-hint" id="stageHint">Scroll to zoom · drag to pan · click a module to open it</div>
+    <div class="toast hidden" id="toast" role="status"></div>
+  </section>
+
+  <aside class="rail" id="rail" aria-label="Inspector">
+    <div class="rail-head">
+      <div class="rail-repo">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="railRepo">No repository</span>
+      </div>
+      <div class="rail-stats" id="railStats">Choose a repo to begin</div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="symbol" role="tab" aria-selected="true">Symbol</button>
+      <button class="tab" data-tab="ask" role="tab">Ask</button>
+      <button class="tab" data-tab="tour" role="tab">Tour</button>
+      <button class="tab" data-tab="study" role="tab">Study</button>
+    </nav>
+
+    <div class="rail-body" id="railBody">
+      <section id="symbolTab" class="panel active">
+        <div id="symbolPanel"></div>
+        <div id="briefPanel"></div>
+        <div id="drawerBody" class="hidden"></div>
+      </section>
+      <section id="askTab" class="panel hidden">
+        <div id="askPanel"></div>
+      </section>
+      <section id="tourTab" class="panel hidden">
+        <div id="tourPanel"></div>
+      </section>
+      <section id="studyTab" class="panel hidden">
+        <div id="studyPanel"></div>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<div id="moduleDrawer" class="drawer-mask hidden">
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Module details">
+    <div class="drawer-head">
+      <div class="dh"><div class="dht" id="drawerTitle"></div><div class="dhx" id="drawerMeta"></div></div>
+      <button class="dh-close" id="drawerClose">×</button>
+    </div>
+    <div class="drawer-stats" id="drawerStats"></div>
+    <div class="drawer-file-groups" id="drawerGroups"></div>
+    <div class="drawer-top" id="drawerTop"></div>
+  </aside>
+</div>
+
+<div id="sidebar" class="sidebar">
+  <div class="scroller" id="sidebarBody"></div>
+  <button class="close" id="sidebarClose">×</button>
+</div>
+
+<div id="overlay" class="overlay hidden">
+  <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="jobTitle">
+    <div class="overlay-top">
+      <div class="pulse" aria-hidden="true"></div>
+      <div>
+        <h2 id="jobTitle">Mapping the repository</h2>
+        <p id="jobMsg" class="muted">Starting…</p>
+      </div>
+      <span class="job-pct" id="jobPct">0%</span>
+    </div>
+    <div class="progress"><div id="jobBar"></div></div>
+    <ol class="job-stages" id="jobStages">
+      <li data-stage="clone">Clone (shallow)</li>
+      <li data-stage="scan">Budget the architecture slice</li>
+      <li data-stage="stage">Stage the slice</li>
+      <li data-stage="extract">Parse ASTs (Graphify)</li>
+      <li data-stage="build">Build modules + layouts</li>
+      <li data-stage="ready">Ready</li>
+    </ol>
+    <p class="oc-note">Hard-bounded: a repo that would take longer is mapped from the best slice, never left spinning. <button class="link" id="overlayClose" type="button">Hide</button></p>
+  </div>
+</div>
+
+<div id="palette" class="palette hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="palette-card">
+    <div class="palette-input">
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16.2 16.2 4.3 4.3"/></svg>
+      <input id="paletteInput" placeholder="Search symbols, or type a GitHub repo…" autocomplete="off" spellcheck="false">
+      <kbd class="kbd">esc</kbd>
+    </div>
+    <div id="paletteResults" class="palette-results"></div>
+    <div class="palette-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+      <span><kbd>↵</kbd> open</span>
+      <span><kbd>/</kbd> search field</span>
+      <span>blur with <kbd>esc</kbd></span>
+    </div>
+  </div>
+</div>
+
+<dialog id="fileDialog" aria-label="Source file">
+  <header>
+    <span id="fileDialogPath"></span>
+    <button id="fileDialogClose" class="icon-btn" title="Close" aria-label="Close">×</button>
+  </header>
+  <pre id="fileContent"></pre>
+</dialog>
+
+<script src="/vendor/marked.umd.js"></script>
+<script src="/vendor/purify.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

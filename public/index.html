@@ -2,95 +2,143 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CodeAtlas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CodeAtlas — understand any codebase before you write a line</title>
+<meta name="description" content="Paste a GitHub repo. Get a bounded, navigable map of its architecture, answers grounded in the real call graph, a reading tour and flashcards. No more spinning clones.">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f1eee5" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <script>
-  // Apply saved theme before first paint to avoid a flash.
   try {
     const t = localStorage.getItem('codeatlas-theme');
     if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
   } catch {}
 </script>
-<link rel="stylesheet" href="style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<link rel="stylesheet" href="/style.css">
 </head>
-<body>
-<header>
-  <div class="brand">⬢ Code<span>Atlas</span></div>
-  <span class="tagline">every repo, mapped like a field notebook</span>
-  <form id="indexForm">
-    <input id="repoUrl" type="url" placeholder="https://github.com/owner/repo" required>
-    <button type="submit" id="indexBtn">Map it</button>
-  </form>
-  <select id="repoSelect" title="Indexed repos"></select>
-  <span id="providerBadge" class="badge"></span>
-  <button id="themeBtn" class="iconBtn" title="Toggle light/dark theme">🌙</button>
-</header>
+<body class="landing">
+<div class="land-wrap">
 
-<main>
-  <section id="graphPane">
-    <div id="graphMeta"></div>
-    <input id="search" placeholder="Search symbols…">
-    <div id="legend" class="hidden"></div>
-    <div id="controls">
-      <button id="zoomIn" title="Zoom in">+</button>
-      <button id="zoomOut" title="Zoom out">−</button>
-      <button id="zoomFit" title="Fit graph to view">⛶</button>
-      <button id="helpBtn" title="How to navigate">?</button>
+  <nav class="land-nav">
+    <a class="brand" href="/" aria-label="CodeAtlas home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-word">Code<span>Atlas</span></span>
+    </a>
+    <div class="links">
+      <a class="navlink hide-sm" href="#how">How it works</a>
+      <a class="navlink hide-sm" href="#benchmark">Benchmark</a>
+      <a class="navlink hide-sm" href="https://github.com/mastaan66/codeatlas" target="_blank" rel="noreferrer">GitHub</a>
+      <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle light and dark theme">◐</button>
+      <a class="btn primary" href="/app">Open the atlas</a>
     </div>
-    <div id="helpCard" class="hidden">
-      <h4>Navigating the atlas</h4>
-      <div><kbd>scroll</kbd><span>zoom in / out</span></div>
-      <div><kbd>drag bg</kbd><span>pan around the map</span></div>
-      <div><kbd>drag node</kbd><span>pull a symbol, watch its pull</span></div>
-      <div><kbd>hover</kbd><span>spotlight a symbol + its neighbors</span></div>
-      <div><kbd>click</kbd><span>fly in &amp; open symbol details</span></div>
-      <div><kbd>esc</kbd><span>fly back out (or double-click bg)</span></div>
-      <div><kbd>type</kbd><span>search dims non-matches; Enter flies to best hit</span></div>
-      <div><kbd>⛶</kbd><span>re-fit the whole graph</span></div>
-      <div><span class="muted">size = connections · color = module</span></div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-top">
+      <span class="hero-kicker"><i></i> A reading instrument, not a graph screenshot</span>
+      <h1>Understand any codebase <em>before you write a line.</em></h1>
     </div>
-    <div id="tooltip"></div>
-    <svg id="graph"></svg>
-    <div id="status" class="hidden"></div>
+    <div class="hero-main">
+      <div class="hero-copy">
+      <p class="lede">
+        Paste a public GitHub repo. CodeAtlas maps its real symbols and links into modules,
+        then lets you ask questions answered from that graph — with <code>file:line</code>
+        citations, not guesses. Large repos are sliced to a hard budget, so the map always
+        finishes.
+      </p>
+      <form class="hero-form" id="heroForm" autocomplete="off">
+        <div class="repo-input-wrap">
+          <span class="prefix">github.com/</span>
+          <input id="heroRepo" name="repo" type="text" spellcheck="false" inputmode="url"
+            placeholder="vllm-project/vllm" aria-label="GitHub repository">
+        </div>
+        <button class="btn primary" type="submit">Map it</button>
+      </form>
+      <div class="hero-proof">
+        <span><b>vLLM</b> 51,443 raw symbols → 8,000-symbol map in <b>under a minute</b></span>
+        <span><b>No</b> browser force simulation</span>
+        <span><b>Grounded</b> answers with citations</span>
+      </div>
+      </div>
+
+      <div class="hero-visual" aria-label="Animated architecture map">
+        <canvas id="heroCanvas"></canvas>
+        <span class="hero-caption">deterministic layout · modules sized by symbols</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="section" id="how">
+    <div class="section-head">
+      <h2>Three ways into an unfamiliar repo</h2>
+      <p>Every view is built from the same Graphify knowledge graph, so the map, the answers and the tour cannot disagree with each other.</p>
+    </div>
+    <div class="grid-3">
+      <article class="feature">
+        <div class="fico">◈</div>
+        <h3>See the architecture</h3>
+        <p>Modules are directories, sized by symbol count and linked by real call and import edges. Click into a module for its symbol canvas, then into a symbol for its ego network. Layouts are precomputed on the server — no frozen browser.</p>
+      </article>
+      <article class="feature">
+        <div class="fico">✳</div>
+        <h3>Ask the map</h3>
+        <p>Retrieval anchors your question in real symbols, pulls the surrounding source, and hands the model a grounded context. Answers cite <code>file:line</code>; follow-ups come from the graph, not the model's imagination.</p>
+      </article>
+      <article class="feature">
+        <div class="fico">▤</div>
+        <h3>Study, don't skim</h3>
+        <p>A numbered onboarding tour from entry points to a first change, plus flashcards and a quiz generated from the graph. Onboarding is studying with a map, not reading random files.</p>
+      </article>
+    </div>
   </section>
 
-  <aside id="sidePane">
-    <nav>
-      <button class="tab active" data-tab="node">Symbol</button>
-      <button class="tab" data-tab="ask">Ask</button>
-      <button class="tab" data-tab="tour">Tour</button>
-      <button class="tab" data-tab="study">Study</button>
-    </nav>
-    <div id="tab-node" class="tabPanel active">
-      <p class="muted">Click a node to inspect it. Node size = connectivity; color = module (community) detected by Graphify.</p>
-      <div id="nodeDetails"></div>
+  <section class="section" id="benchmark">
+    <div class="section-head">
+      <h2>Bounded by design</h2>
+      <p>Most code-graph tools die on a real repository. CodeAtlas chooses a representative architecture slice, extracts it with deadlines, and caps what it serves — then tells you what it left out.</p>
     </div>
-    <div id="tab-ask" class="tabPanel">
-      <textarea id="question" rows="3" placeholder="How does authentication reach the database?"></textarea>
-      <button id="askBtn">Ask Gemma 4</button>
-      <div id="answer" class="prose"></div>
+    <div class="statband">
+      <div><b>51s</b><span>vLLM · 51,443 raw symbols parsed</span></div>
+      <div><b>8,000</b><span>symbols served by degree, 39,868 links</span></div>
+      <div><b>1,200</b><span>file budget across the largest areas</span></div>
+      <div><b>150s</b><span>hard extract deadline — never left spinning</span></div>
     </div>
-    <div id="tab-tour" class="tabPanel">
-      <button id="tourBtn">Generate onboarding tour</button>
-      <div id="tour" class="prose"></div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <h2>Already mapped</h2>
+      <p>Open a pre-indexed repository and start reading. Any other public repo can be mapped on demand.</p>
     </div>
-    <div id="tab-study" class="tabPanel">
-      <p class="muted">Onboarding a codebase is studying it — drill the map with flashcards and a pop quiz written from the knowledge graph.</p>
-      <button id="studyBtn">Make flashcards from this repo</button>
-      <div id="study" class="studyKit"></div>
+    <div class="gallery" id="gallery">
+      <a class="repo-card" href="/app?repo=memolite">
+        <div class="rc-name">memolite</div>
+        <div class="rc-meta">SQLite memory for LLMs · Python</div>
+        <div class="rc-langs"><span class="rc-lang">Python</span><span class="rc-lang">SQLite</span></div>
+      </a>
+      <a class="repo-card" href="/app?repo=expressjs-cors">
+        <div class="rc-name">expressjs/cors</div>
+        <div class="rc-meta">CORS middleware · Node.js</div>
+        <div class="rc-langs"><span class="rc-lang">JavaScript</span></div>
+      </a>
+      <a class="repo-card" href="/app?repo=vllm-project-vllm">
+        <div class="rc-name">vllm-project/vllm</div>
+        <div class="rc-meta">LLM inference engine · Python + Rust + CUDA</div>
+        <div class="rc-langs"><span class="rc-lang">Python</span><span class="rc-lang">Rust</span><span class="rc-lang">CUDA</span></div>
+      </a>
     </div>
-  </aside>
-</main>
-<dialog id="fileDialog">
-  <header>
-    <span id="fileDialogPath"></span>
-    <button id="fileDialogClose" class="iconBtn" title="Close">✕</button>
-  </header>
-  <pre id="fileContent"></pre>
-</dialog>
-<script src="app.js"></script>
+  </section>
+
+  <footer class="foot">
+    <span>CodeAtlas · built for the 2026 hackathon · structure first, narration second.</span>
+    <div class="links">
+      <a href="/app">Open app</a>
+      <a href="https://github.com/mastaan66/codeatlas" target="_blank" rel="noreferrer">Source</a>
+      <a href="/api/health">API health</a>
+    </div>
+  </footer>
+</div>
+
+<script src="/landing.js"></script>
 </body>
 </html>
