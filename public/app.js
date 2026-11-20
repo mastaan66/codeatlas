@@ -26,6 +26,9 @@
     } catch { return esc(text); }
   };
   const short = (s, n) => (String(s || '').length > n ? `${String(s).slice(0, n - 1)}…` : String(s || ''));
+  const REDUCED = typeof matchMedia === 'function'
+    ? matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false;
   const TOAST = $('#toast');
   let toastTimer = 0;
   function toast(msg) {
@@ -239,6 +242,7 @@
       this.renderLegend();
       this.activateTab('symbol');
       this.renderModuleGrid();
+      this.renderBriefPanel(brief, { compact: true });
       const ri = $('#repoInput'); if (ri) ri.value = slug;
       $('#stageHint').classList.add('hidden');
       const only = this.overview.modules.filter((m) => !m.hidden && m.primary !== false);
@@ -355,7 +359,7 @@
     }
 
     /* ------------------------------------------------------------ brief */
-    renderBriefPanel(brief) {
+    renderBriefPanel(brief, opts = {}) {
       const el = $('#briefPanel');
       if (!brief) { el.innerHTML = ''; return; }
       const f = brief.facts || brief;
@@ -368,7 +372,7 @@
             <div class="stat-cell"><div class="k">Entry points</div><div class="v">${fmt((f.entryPoints || []).length)}</div></div>
             <div class="stat-cell"><div class="k">Languages</div><div class="v">${f.languages?.length || 0}</div></div>
           </div>
-          ${(f.modules || []).map((m) => `
+          ${opts.compact ? '' : (f.modules || []).map((m) => `
             <button class="module-card" data-module="${esc(m.id)}" style="margin-top:8px">
               <div class="module-card-row"><span class="dot"></span><div><div class="mk">${esc(m.name)}</div><div class="mx">${fmt(m.count)} symbols · ${m.files} files</div></div></div>
             </button>`).join('')}
@@ -500,6 +504,7 @@
       const out = await api('/api/ask', { method: 'POST', body: JSON.stringify({ slug: this.slug, question: q }) }).catch((e) => ({ error: e.message }));
       item.pending = false;
       item.a = out.answer || '';
+      item.warning = out.warning || '';
       item.sources = out.sources || [];
       item.followups = out.followups || [];
       this.askBusy = false;
@@ -515,6 +520,7 @@
               <div class="ask-meta"><span style="color:var(--text)">${esc(q.q)}${q.pending ? ' <span style="color:var(--faint)">…</span>' : ''}</span></div>
               ${q.pending ? '<div class="ask-body"><span class="spinner"></span>Reading the graph…</div>' : ''}
               ${q.a ? `<div class="ask-block answer"><div class="ask-body">${md(q.a)}</div></div>` : ''}
+              ${q.warning ? `<div class="ask-block answer"><div class="ask-body" style="color:var(--faint)">${esc(q.warning)}</div></div>` : ''}
               ${q.error ? `<div class="ask-block answer"><div class="ask-body" style="color:var(--red)">${esc(q.error)}</div></div>` : ''}
               ${(q.sources || []).length ? `<div class="ask-source">${q.sources.map((s) => `<button class="ask-source-row" data-file="${esc(s.file)}" data-loc="${esc(s.loc || '')}"><span class="loc">${esc(s.loc || '')}</span><span>${esc(short(s.file, 46))}</span></button>`).join('')}</div>` : ''}
               ${(q.followups || []).length ? `<div class="chips" style="margin-top:8px">${q.followups.map((f) => `<button class="chip" data-follow="${esc(f)}">${esc(f)}</button>`).join('')}</div>` : ''}
@@ -528,20 +534,22 @@
       $$('[data-follow]', el).forEach((b) => b.addEventListener('click', () => { const q = b.dataset.follow; if (q) { const ta = $('#askInput'); if (ta) ta.value = q; this.ask(); } }));
       const ta = $('#askInput');
       ta?.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); this.ask(); } });
-      ta?.focus();
+      $('#askBtn')?.addEventListener('click', () => this.ask());
+      if (this.tab === 'ask') ta?.focus();
     }
 
     /* ------------------------------------------------------------ tour */
-    async loadTour() {
-      const btn = $('#tourBtn');
-      if (!btn) return;
-      setBusy(btn, true, 'Writing tour…');
+    async loadTour(btn) {
+      const b = btn || $('#tourBtn');
+      if (!b) return;
+      setBusy(b, true, 'Writing tour…');
       try {
         const out = await api(`/api/tour/${encodeURIComponent(this.slug)}?refresh=1`);
         this.tour = out.tour;
-        btn.dataset.loaded = '1';
+        this.tourWarning = out.warning || null;
+        b.dataset.loaded = '1';
       } catch (err) { toast(err.message); return; }
-      finally { setBusy(btn, false); }
+      finally { setBusy(b, false); }
       this.renderTour();
     }
 
@@ -564,7 +572,11 @@
 
     renderTour() {
       const el = $('#tourPanel');
-      if (!this.tour) { el.innerHTML = '<p class="muted">Tap Generate tour.</p>'; return; }
+      if (!this.tour) {
+        el.innerHTML = `<p class="muted" style="margin-bottom:10px">A guided reading order for this repository, built from its real symbols.</p><button class="chip-btn" id="tourBtn">Generate tour</button>`;
+        $('#tourBtn')?.addEventListener('click', (e) => this.loadTour(e.currentTarget));
+        return;
+      }
       const steps = this.parseTour(this.tour);
       const doneCount = steps.filter((s) => s.done).length;
       el.innerHTML = `
@@ -582,7 +594,8 @@
               <button class="go" data-idx="${i}" aria-label="Mark read">✔</button>
             </div>`).join('')}
         </div>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><button class="chip-btn" id="tourReset" style="font-size:11px">Reset progress</button></div>`;
+        ${this.tourWarning ? `<p class="muted" style="margin-top:10px;font-size:11px">${esc(this.tourWarning)}</p>` : ''}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;gap:8px"><button class="chip-btn" id="tourReset" style="font-size:11px">Reset progress</button><button class="chip-btn" id="tourRefresh" style="font-size:11px">Regenerate</button></div>`;
       $$('.tour-step .go', el).forEach((b) => b.addEventListener('click', async () => {
         const idx = Number(b.dataset.idx);
         const step = steps[idx];
@@ -603,26 +616,33 @@
         this.renderTour();
       }));
       $('#tourReset')?.addEventListener('click', () => { this.tourDone = new Set(); this.tourIdx = 0; toast('Tour progress reset'); });
+      $('#tourRefresh')?.addEventListener('click', (e) => this.loadTour(e.currentTarget));
     }
 
     /* ------------------------------------------------------------ study */
-    async loadStudy() {
-      const btn = $('#studyBtn');
-      if (!btn) return;
-      setBusy(btn, true, 'Making cards…');
+    async loadStudy(btn) {
+      const b = btn || $('#studyBtn');
+      if (!b) return;
+      setBusy(b, true, 'Making cards…');
       try {
         const out = await api(`/api/studykit/${encodeURIComponent(this.slug)}`);
         this.study = out;
+        this.studyWarning = out.warning || null;
         this.flashIdx = 0;
         this.studyTab = 'flash';
         this.renderStudy();
       } catch (err) { toast(err.message); }
-      finally { setBusy(btn, false); }
+      finally { setBusy(b, false); }
     }
 
     renderStudy() {
       const el = $('#studyPanel');
       const kit = this.study || {};
+      if (!this.study) {
+        el.innerHTML = `<p class="muted" style="margin-bottom:10px">Flashcards and a quiz built from this repository's real symbols and files.</p><button class="chip-btn" id="studyBtn">Make cards</button>`;
+        $('#studyBtn')?.addEventListener('click', (e) => this.loadStudy(e.currentTarget));
+        return;
+      }
       if (this.studyTab === 'quiz') { this.renderQuiz(el, kit); return; }
       const cards = kit.flashcards || [];
       const view = cards.slice(this.flashIdx, this.flashIdx + 3);
@@ -635,8 +655,9 @@
       const el = $('#studyPanel');
       if (this.studyTab !== 'flash' || !kit.flashcards?.length) return;
       el.insertAdjacentHTML('beforeend', `
+        ${this.studyWarning ? `<p class="muted" style="margin-top:10px;font-size:11px">${esc(this.studyWarning)}</p>` : ''}
         <div style="margin-top:12px;display:flex;gap:8px">
-          <button class="chip-btn" id="quizBtn" style="font-size:11px">Jump to quiz</button>
+          ${(kit.quiz || []).length ? '<button class="chip-btn" id="quizBtn" style="font-size:11px">Jump to quiz</button>' : ''}
           ${this.flashIdx + 1 < kit.flashcards.length ? `<button class="chip-btn" id="nextCard" style="font-size:11px">Next card →</button>` : ''}
         </div>`);
       $('#nextCard')?.addEventListener('click', () => {
@@ -654,6 +675,7 @@
     renderQuiz(el, kit) {
       const q = (kit.quiz || [])[this.quizIdx];
       const total = (kit.quiz || []).length;
+      if (!q) { this.studyTab = 'flash'; this.renderStudy(); return; }
       el.innerHTML = `
         <div class="card2">
           <div class="quiz-q">${esc(q.question)}</div>
@@ -1113,9 +1135,22 @@
 
     /* ------------------------------------------------------------ ui */
     activateTab(name) {
-      $$('.tab').forEach((t) => { const on = t.dataset.tab === name; t.classList.toggle('active', on); });
-      $$('.panel').forEach((p) => p.classList.toggle('active', p.id === `${name}Tab`));
-      if (this.view === 'ego') this.renderSymbolPanel();
+      this.tab = name;
+      $$('.tab').forEach((t) => {
+        const on = t.dataset.tab === name;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      $$('.panel').forEach((p) => {
+        const on = p.id === `${name}Tab`;
+        p.classList.toggle('active', on);
+        // Panels ship with `hidden`; it must be removed or .panel.active never shows.
+        p.classList.toggle('hidden', !on);
+      });
+      if (name === 'ask') this.renderAsk();
+      if (name === 'tour') this.renderTour();
+      if (name === 'study') this.renderStudy();
+      if (name === 'symbol' && this.view === 'ego') this.renderSymbolPanel();
     }
     renderRailHead() {
       const st = this.overview?.stats || null;
@@ -1187,12 +1222,13 @@
       $('#search').addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#searchResults').classList.add('hidden'); });
       $('#searchResults').addEventListener('click', () => $('#searchResults').classList.add('hidden'));
       $('#themeBtn').addEventListener('click', () => this.themeToggle());
+      $$('.tab').forEach((t) => t.addEventListener('click', () => this.activateTab(t.dataset.tab)));
       $('#paletteBtn').addEventListener('click', () => this.openPalette());
-      $('#palette').addEventListener('click', (e) => { if (e.target.id === 'palette') closePalette(); });
+      $('#palette').addEventListener('click', (e) => { if (e.target.id === 'palette') this.closePalette(); });
       $('#paletteInput').addEventListener('input', () => { const q = $('#paletteInput').value; if (q) setTimeout(() => this.paletteSearch(q), 120); });
       $('#paletteInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closePalette();
-        if (e.key === 'Enter') { const active = $('#paletteResults .search-result'); if (active) active.click(); else closePalette(); }
+        if (e.key === 'Escape') this.closePalette();
+        if (e.key === 'Enter') { const active = $('#paletteResults .search-result'); if (active) active.click(); else this.closePalette(); }
       });
       $('#fileDialogClose').addEventListener('click', () => $('#fileDialog').close());
       $('#sidebarClose').addEventListener('click', () => this.toggleSidebar());
@@ -1206,7 +1242,7 @@
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); this.openPalette(); }
         if (e.key === '/' && !typing) { e.preventDefault(); $('#search').focus(); }
         if (e.key === 'Escape') {
-          if (!$('#palette').classList.contains('hidden')) { closePalette(); return; }
+          if (!$('#palette').classList.contains('hidden')) { this.closePalette(); return; }
           if (typing) { document.activeElement.blur(); return; }
           this.back();
         }

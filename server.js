@@ -525,8 +525,6 @@ ${turns ? `\n## Recent conversation\n${turns}` : ''}
 ## Question
 ${question}`;
 
-    const { text, provider } = await askGemma(prompt);
-
     // Deterministic follow-ups from the graph, not model guesses.
     const followups = [];
     const a = r.anchors[0];
@@ -535,11 +533,118 @@ ${question}`;
       followups.push(`Explain ${a.file || a.label} in detail`);
     }
     if (r.sources.length > 1) followups.push(`How does ${r.sources[0].label} reach ${r.sources[1].label}?`);
-    res.json({ answer: text, provider, sources: r.sources, followups: followups.slice(0, 3) });
+
+    let out;
+    try {
+      out = await askGemma(prompt);
+    } catch (err) {
+      if (err.code !== 'MODEL_UNAVAILABLE') throw err;
+      // Never invent an answer: return the grounded sources and say the guide is down.
+      return res.json({
+        answer: null, warning: err.message, provider: null,
+        sources: r.sources, followups: followups.slice(0, 3),
+      });
+    }
+    res.json({ answer: out.text, provider: out.provider, sources: r.sources, followups: followups.slice(0, 3) });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
+
+/* ------------------------------------------- graph-derived fallbacks */
+// When the guide model is unreachable, tour and study still work: both are
+// built from real symbols and files in the graph, never invented text.
+
+function graphFacts(graph) {
+  const nodes = (graph.nodes || []).filter((n) => n && n.label);
+  const files = new Map();
+  for (const n of nodes) if (n.file) files.set(n.file, (files.get(n.file) || 0) + 1);
+  const topFiles = [...files.entries()].sort((a, b) => b[1] - a[1]);
+  const byDegree = [...nodes].sort((a, b) => (b.degree || 0) - (a.degree || 0));
+  const kinds = new Map();
+  for (const n of nodes) {
+    const k = String(n.kind || 'symbol');
+    kinds.set(k, (kinds.get(k) || 0) + 1);
+  }
+  return { nodes, topFiles, byDegree, kinds: [...kinds.entries()].sort((a, b) => b[1] - a[1]) };
+}
+
+const ENTRY_FILE_RE = /(^|\/)(index|main|server|app|cli|__init__|mod|lib)\.(js|ts|jsx|tsx|mjs|cjs|py|go|rs|java|rb|php)$/i;
+
+function graphTour(slug, graph) {
+  const { nodes, topFiles, byDegree } = graphFacts(graph);
+  if (!nodes.length) return `# 1. Open the repository\nNo symbols were extracted for \`${slug}\`.`;
+  const entry = nodes.find((n) => ENTRY_FILE_RE.test(n.file || '')) || byDegree[0];
+  const biggest = topFiles[0] ? { file: topFiles[0][0], count: topFiles[0][1] } : null;
+  const hub = byDegree[0];
+  const testFile = topFiles.find(([f]) => /(^|\/)(test|tests|spec|specs|__tests__)\//i.test(f));
+  const stops = [];
+  stops.push({
+    title: `Start at ${entry.file || entry.label}`,
+    read: `${entry.file || entry.label}${entry.label && entry.label !== entry.file ? `, ${entry.label}` : ''}`,
+    why: 'The most direct way into the code — entry points fan out to everything else.',
+  });
+  if (biggest && biggest.file !== entry.file) {
+    stops.push({
+      title: `Then ${biggest.file}`,
+      read: `${biggest.file} (${biggest.count} symbols)`,
+      why: 'The densest file in the map; most of the behaviour lives here.',
+    });
+  }
+  if (hub) {
+    stops.push({
+      title: `Follow the hub: ${hub.label}`,
+      read: `${hub.label} — ${hub.file || 'unknown file'} ${hub.loc || ''}`.trim(),
+      why: `Highest fan-out in the graph (${hub.degree || 0} links). Understanding it explains the rest.`,
+    });
+  }
+  if (testFile) {
+    stops.push({ title: `Read the tests: ${testFile[0]}`, read: testFile[0], why: 'Tests show the contract and expected behaviour better than prose.' });
+  }
+  stops.push({
+    title: 'Where to make your first change',
+    read: biggest ? biggest.file : (entry.file || entry.label),
+    why: 'Start small: one function, one test, then run the suite.',
+  });
+  return stops.map((s, i) => `# ${i + 1}. ${s.title}\nRead: \`${s.read}\`\n${s.why}`).join('\n\n');
+}
+
+function graphStudyKit(slug, graph) {
+  const { nodes, topFiles, byDegree, kinds } = graphFacts(graph);
+  if (nodes.length < 4 || topFiles.length < 4) return null;
+  const hub = byDegree[0];
+
+  // Four real options, no invented names. Returns null when there are too few files.
+  const options = (correct) => {
+    const others = topFiles.map(([f]) => f).filter((f) => f !== correct).slice(0, 3);
+    if (others.length < 3) return null;
+    const list = [correct, ...others];
+    const rot = correct.length % 4;
+    const rotated = [...list.slice(rot), ...list.slice(0, rot)];
+    return { options: rotated, answerIndex: rotated.indexOf(correct) };
+  };
+
+  const flashcards = [
+    { front: `Which file owns the most symbols in ${slug}?`, back: topFiles[0][0] },
+    { front: 'What is the most connected symbol in the repository?', back: hub.label },
+    { front: `Which file defines ${hub.label}?`, back: hub.file || 'unknown' },
+    { front: 'How many symbols does the map hold?', back: String(nodes.length) },
+    { front: 'Which symbol kind is most common?', back: kinds[0] ? `${kinds[0][0]} (${kinds[0][1]})` : 'unknown' },
+    { front: `Which file is the second densest after ${topFiles[0][0]}?`, back: topFiles[1][0] },
+  ];
+
+  const quiz = [];
+  const q1 = options(topFiles[0][0]);
+  if (q1) quiz.push({ question: `Which file owns the most symbols in ${slug}?`, ...q1, explanation: `${topFiles[0][0]} holds ${topFiles[0][1]} symbols — the highest count in the map.` });
+  if (hub.file) {
+    const q2 = options(hub.file);
+    if (q2) quiz.push({ question: `Which file defines ${hub.label}?`, ...q2, explanation: `${hub.label} lives in ${hub.file} at ${hub.loc || 'an unknown line'}.` });
+  }
+  const q3 = options(topFiles[1][0]);
+  if (q3) quiz.push({ question: `Which file is the second densest in ${slug}?`, ...q3, explanation: `${topFiles[1][0]} holds ${topFiles[1][1]} symbols, behind ${topFiles[0][0]}.` });
+
+  return { flashcards, quiz };
+}
 
 app.get('/api/tour/:slug', async (req, res) => {
   try {
@@ -554,8 +659,19 @@ app.get('/api/tour/:slug', async (req, res) => {
 
 ## Knowledge graph digest
 ${context}`;
-    const { text, provider } = await askGemma(prompt);
-    const tour = { slug, tour: text, provider, generatedAt: new Date().toISOString() };
+    let out;
+    try {
+      out = await askGemma(prompt);
+    } catch (err) {
+      if (err.code !== 'MODEL_UNAVAILABLE') throw err;
+      // The model is down; a real graph-derived tour beats an error screen.
+      // Not cached, so a written tour replaces it once the model is back.
+      return res.json({
+        slug, tour: graphTour(slug, graph), provider: 'graph-derived',
+        warning: err.message, generatedAt: new Date().toISOString(),
+      });
+    }
+    const tour = { slug, tour: out.text, provider: out.provider, generatedAt: new Date().toISOString() };
     fs.writeFileSync(cacheFile, JSON.stringify(tour));
     res.json(tour);
   } catch (err) {
@@ -630,13 +746,27 @@ Rules:
 ${context}`;
     let kit = null;
     let provider = null;
-    for (let attempt = 1; attempt <= 2 && !kit; attempt++) {
-      const out = await askGemma(attempt === 1 ? prompt
-        : prompt + '\n\nIMPORTANT: Your previous reply was not valid JSON of the required shape. Reply again with ONLY the raw JSON object.');
-      provider = out.provider;
-      kit = validateStudyKit(out.text);
+    let warning = null;
+    try {
+      for (let attempt = 1; attempt <= 2 && !kit; attempt++) {
+        const out = await askGemma(attempt === 1 ? prompt
+          : prompt + '\n\nIMPORTANT: Your previous reply was not valid JSON of the required shape. Reply again with ONLY the raw JSON object.');
+        provider = out.provider;
+        kit = validateStudyKit(out.text);
+      }
+    } catch (err) {
+      if (err.code !== 'MODEL_UNAVAILABLE') throw err;
+      warning = err.message;
     }
-    if (!kit) throw new Error('Gemma did not return a valid study kit after a retry');
+    if (!kit) {
+      // Model down or unusable output: build real cards from the graph instead.
+      const fallback = graphStudyKit(slug, graph);
+      if (!fallback) return res.status(503).json({ error: warning || 'Not enough structure in this graph to build a study kit' });
+      return res.json({
+        slug, ...fallback, provider: 'graph-derived', warning,
+        generatedAt: new Date().toISOString(),
+      });
+    }
     const payload = {
       slug, flashcards: kit.flashcards, quiz: kit.quiz,
       provider, generatedAt: new Date().toISOString(),

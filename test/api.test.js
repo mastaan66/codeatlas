@@ -143,13 +143,30 @@ test('GET /api/studykit with a malformed slug is a clean 4xx, not a crash', asyn
   assert.strictEqual(health.status, 200);
 });
 
-test('GET /api/studykit/memolite with providers down is a graceful 5xx JSON', async () => {
+test('GET /api/studykit/memolite with providers down falls back to graph-derived cards', async () => {
   // refresh=1 bypasses any cached kit; both LLM providers are unreachable here.
   const res = await request('GET', '/api/studykit/memolite?refresh=1');
-  assert.ok(res.status >= 500, `expected 5xx, got ${res.status}`);
-  assert.ok(res.json && typeof res.json.error === 'string', `error JSON expected, got: ${res.body}`);
+  assert.strictEqual(res.status, 200, `expected 200, got ${res.status}: ${res.body}`);
+  assert.strictEqual(res.json.provider, 'graph-derived');
+  assert.ok(Array.isArray(res.json.flashcards) && res.json.flashcards.length >= 4);
+  assert.ok(res.json.flashcards.every((c) => c.front && c.back));
   const health = await request('GET', '/api/health');
   assert.strictEqual(health.status, 200);
+});
+
+test('GET /api/tour/memolite with providers down returns a graph-derived tour', async () => {
+  const res = await request('GET', '/api/tour/memolite?refresh=1');
+  assert.strictEqual(res.status, 200, `expected 200, got ${res.status}: ${res.body}`);
+  assert.strictEqual(res.json.provider, 'graph-derived');
+  assert.match(res.json.tour, /^# 1\./);
+  assert.ok(res.json.warning, 'warning should explain the model was unavailable');
+});
+
+test('POST /api/ask with providers down warns instead of inventing an answer', async () => {
+  const res = await request('POST', '/api/ask', { slug: 'memolite', question: 'What is the entry point?' });
+  assert.strictEqual(res.status, 200, `expected 200, got ${res.status}: ${res.body}`);
+  assert.strictEqual(res.json.answer, null);
+  assert.match(res.json.warning, /busy|unavailable/i);
 });
 
 test('GET /api/file for a file absent locally is a clean 404', async () => {
