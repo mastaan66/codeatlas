@@ -7,7 +7,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 
-const { indexRepo, listRepos, loadGraph, repoSlug, readMeta } = require('./lib/indexer');
+const { indexRepo, listRepos, loadGraph, repoSlug, readMeta, parseRepo } = require('./lib/indexer');
 const { buildQuestionContext, buildTourContext } = require('./lib/graphContext');
 const { askGemma } = require('./lib/gemma');
 const atlas = require('./lib/atlas');
@@ -25,7 +25,6 @@ fs.mkdirSync(path.join(DATA_DIR, 'tours'), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'studykits'), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'briefs'), { recursive: true });
 
-const GITHUB_URL_RE = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/;
 
 /* ------------------------------------------------------------------- pages */
 
@@ -174,6 +173,12 @@ app.get('/api/repos', (req, res) => {
 
 app.post('/api/index', (req, res) => {
   try {
+    // Validate first so a typo doesn't burn one of the user's index slots.
+    const parsed = parseRepo((req.body || {}).repoUrl);
+    if (!parsed) {
+      return res.status(400).json({ error: 'expected a public GitHub repo like owner/repo or https://github.com/owner/repo' });
+    }
+
     const now = Date.now();
     const hits = (indexHits.get(req.ip) || []).filter((t) => now - t < 600000);
     if (hits.length >= INDEX_LIMIT) {
@@ -182,12 +187,8 @@ app.post('/api/index', (req, res) => {
     hits.push(now);
     indexHits.set(req.ip, hits);
 
-    const repoUrl = String((req.body || {}).repoUrl || '').trim();
-    const m = GITHUB_URL_RE.exec(repoUrl);
-    if (!m) {
-      return res.status(400).json({ error: 'expected a public GitHub URL like https://github.com/owner/repo' });
-    }
-    const slug = repoSlug(`${m[1]}-${m[2]}`);
+    const repoUrl = parsed.url;
+    const slug = repoSlug(`${parsed.owner}-${parsed.name}`);
 
     const existing = busyRepos.get(repoUrl);
     if (existing && (existing.state === 'queued' || existing.state === 'running')) {

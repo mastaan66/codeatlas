@@ -6,7 +6,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm ci
+    buildCommand: npm ci && sh scripts/install-graphify.sh
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true

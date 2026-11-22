@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { repoSlug, indexRepo, loadGraph } = require('../lib/indexer');
+const { repoSlug, indexRepo, loadGraph, parseRepo } = require('../lib/indexer');
 
 // An empty scratch dataDir guarantees loadGraph falls back to seed-graphs/.
 const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codeatlas-test-'));
@@ -38,13 +38,32 @@ test('repoSlug throws statusCode 400 on oversized input', () => {
 test('indexRepo rejects non-GitHub URLs with a friendly 400', async () => {
   for (const url of [
     'https://gitlab.com/foo/bar',
-    'http://github.com/foo/bar', // http, not https
+    'gitlab.com/foo/bar',
     'https://github.com.evil.com/foo/bar',
+    'github.com.evil.com/foo/bar',
     'not a url at all',
+    'foo/..',
     '',
     undefined,
   ]) {
     await assert.rejects(indexRepo(scratchDir, url), isFriendly400, `should reject: ${url}`);
+  }
+});
+
+test('parseRepo accepts the ways people paste a repo, always canonical https', () => {
+  const want = { owner: 'canonical', name: 'dqlite', url: 'https://github.com/canonical/dqlite' };
+  for (const input of [
+    'canonical/dqlite',
+    'github.com/canonical/dqlite',
+    'http://github.com/canonical/dqlite',
+    'https://www.github.com/canonical/dqlite/',
+    'https://github.com/canonical/dqlite.git',
+    'https://github.com/canonical/dqlite/tree/master/src',
+    'https://github.com/canonical/dqlite?tab=readme',
+    'git@github.com:canonical/dqlite.git',
+    '  canonical/dqlite  ',
+  ]) {
+    assert.deepStrictEqual(parseRepo(input), want, `input: ${input}`);
   }
 });
 

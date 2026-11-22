@@ -121,7 +121,7 @@ test('POST /api/ask without a question is a 400', async () => {
 test('POST /api/index with a bad URL is a 400', async () => {
   const res = await request('POST', '/api/index', { repoUrl: 'https://evil.com/x;rm -rf /' });
   assert.strictEqual(res.status, 400);
-  assert.match(res.json.error, /GitHub URL/);
+  assert.match(res.json.error, /GitHub repo/);
 });
 
 test('GET /api/file rejects traversal and absolute paths', async () => {

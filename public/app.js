@@ -379,7 +379,6 @@
         this.view = 'overview';
         this.requestDraw();
       }
-      $('#repoInput')?.addEventListener('change', (e) => { const v = e.target.value; if (v) { this.loadOverview(v); } });
       $('#sidebarToggle').addEventListener('click', () => this.toggleSidebar());
       $('#drawerBackdrop').addEventListener('click', () => $('#moduleDrawer').classList.add('hidden'));
       $('#drawerClose').addEventListener('click', () => $('#moduleDrawer').classList.add('hidden'));
@@ -1885,24 +1884,62 @@
 
     /* ------------------------------------------------------------ life */
     async startIndex(repo) {
+      repo = String(repo || '').trim();
+      if (!repo) { $('#repoInput')?.focus(); return; }
+      // Already mapped? Open it instead of re-queuing (matches slug or owner/repo).
+      const key = repo.toLowerCase()
+        .replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//, '')
+        .replace(/\/+$/, '').replace(/\.git$/, '');
+      const known = this.repoList.find((r) => r.slug === repo
+        || ((r.meta && r.meta.repo) || '').toLowerCase().replace(/^https?:\/\/(www\.)?github\.com\//, '') === key);
+      if (known) { await this.loadOverview(known.slug); return; }
+
+      const fail = (msg) => {
+        $('#overlay').classList.add('hidden');
+        toast(msg || 'Indexing failed');
+      };
+      $('#jobMsg').textContent = 'Starting…';
+      $('#jobPct').textContent = '0%';
+      $('#jobBar').style.width = '0%';
       $('#overlay').classList.remove('hidden');
-      const out = await api('/api/index', { method: 'POST', body: JSON.stringify({ repoUrl: repo }) });
+      let out;
+      try {
+        out = await api('/api/index', { method: 'POST', body: JSON.stringify({ repoUrl: repo }) });
+      } catch (err) {
+        fail(err.message);
+        return;
+      }
       const es2 = new EventSource(`/api/job/${out.jobId}/events`);
-      es2.onmessage = (ev) => {
-        const job = JSON.parse(ev.data);
+      let settled = false;
+      const onJob = (job) => {
         $('#jobMsg').textContent = job.message || '';
         $('#jobPct').textContent = `${job.progress || 0}%`;
         $('#jobBar').style.width = `${job.progress || 0}%`;
         $$('#jobStages li').forEach((li) => li.classList.toggle('done', job.state === 'ready'));
         if (job.state === 'ready') {
+          settled = true;
           es2.close();
           $('#overlay').classList.add('hidden');
-          this.loadOverview(job.slug || out.slug);
+          this.loadRepos().then(() => this.loadOverview(job.slug || out.slug));
           toast(job.cached ? 'Loaded the existing map' : `Mapped ${fmt(job.stats?.nodes || 0)} symbols`);
         } else if (job.state === 'failed') {
+          settled = true;
           es2.close();
-          toast(job.error || 'Indexing failed');
-          $('#overlay').classList.add('hidden');
+          fail(job.error || 'Indexing failed');
+        }
+      };
+      es2.onmessage = (ev) => onJob(JSON.parse(ev.data));
+      es2.onerror = async () => {
+        if (settled) return;
+        // The stream dropped (proxy timeout, server restart). Check the job
+        // directly so a finished job still opens and a lost one says so.
+        try {
+          const job = await api(`/api/job/${out.jobId}`);
+          if (job.state === 'ready' || job.state === 'failed') onJob(job);
+        } catch (err) {
+          settled = true;
+          es2.close();
+          fail(err.message);
         }
       };
     }
